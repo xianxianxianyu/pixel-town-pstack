@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#172c25">
+  <title>像素小镇</title>
+  <link rel="stylesheet" href="town.css">
+</head>
+<body>
+  <main>
+    <section class="town-panel" aria-label="像素小镇地图">
+      <div class="town-scene">
+        <div id="town-stage" class="town-stage">
+          <div id="connection-banner" class="connection-banner" role="alert" hidden><span>连不上 DSH（未登录或服务已停）</span><button id="retry" type="button">重试</button><a href="/" target="_blank" rel="noopener">打开 DSH</a></div>
+          <canvas id="town-ground" aria-hidden="true"></canvas>
+          <canvas id="town-sprites" aria-hidden="true"></canvas>
+          <button id="map-notice" class="map-object notice-object" type="button" aria-label="告示牌：正在连接 DSH，打开设置与居民列表" aria-haspopup="dialog" aria-expanded="false" aria-controls="town-popover"><span class="notice-face" aria-hidden="true"><span id="notice-stats"></span><span class="notice-connection"><i class="connection-lamp"></i><span id="notice-status">连接中</span></span></span><span class="map-object-label">设置</span></button>
+          <button id="map-mailbox" class="map-object mailbox-object" type="button" aria-label="收件箱：0 项待处理" aria-haspopup="dialog" aria-expanded="false" aria-controls="town-popover"><span id="mail-badge" class="mail-badge" hidden>0</span><span class="map-object-label">收件箱</span></button>
+          <button id="map-gate" class="map-object gate-object" type="button" aria-label="出镇关口：开 PR / MR，查看最近离开的居民" aria-haspopup="dialog" aria-expanded="false" aria-controls="town-popover"><span class="map-object-label">开 PR / MR</span></button>
+          <svg id="town" preserveAspectRatio="xMinYMin meet" role="group" aria-label="像素小镇：工地、侦探社、灭虫急诊站与公园，木牌代表 pstack playbook">
+            <g id="scenery"></g>
+            <g id="buildings"></g>
+            <g id="residents"></g>
+          </svg>
+          <div id="save-points" role="group" aria-label="各建筑的存档点"></div>
+          <div id="town-tint" class="town-tint" aria-hidden="true"></div>
+          <canvas id="town-glow" aria-hidden="true"></canvas>
+          <p id="empty-state" class="empty-state" role="status">正在读取会话</p>
+        </div>
+      </div>
+    </section>
+  </main>
+  <dialog id="town-popover" class="town-popover" aria-labelledby="popover-chip popover-title">
+    <div class="popover-top"><span id="popover-chip" class="panel-chip" hidden></span><h2 id="popover-title"></h2><button id="close-popover" type="button" aria-label="关闭">×</button></div>
+    <div id="popover-content"></div>
+  </dialog>
+  <dialog id="info" aria-labelledby="info-title"><div class="dialog-top"><h2 id="info-title"></h2><button id="close-info" type="button" aria-label="关闭">×</button></div><div id="info-content"></div></dialog>
+  <script type="module" src="live-data.js"></script>
+  <script type="module" src="town.js"></script>
+</body>
+</html>

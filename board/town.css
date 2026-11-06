@@ -1,0 +1,414 @@
+/* ---------- Tokens & base ---------- */
+:root {
+  color-scheme: light;
+  --ink: #29483d;
+  --muted: #718074;
+  --green: #365e47;
+  --focus: #245b9b;
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  color: var(--ink);
+  background: #edf3e8;
+  font-synthesis: none;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { height: 100%; overflow: hidden; }
+body { margin: 0; height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
+h1, h2, h3, p { margin: 0; }
+a { color: #365e47; }
+button { font: inherit; color: inherit; cursor: pointer; border: 1px solid #c7d3be; border-radius: 5px; background: #fffef5; }
+button:hover { background: #e7efdc; }
+button:focus-visible, [tabindex]:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.muted { color: var(--muted); font-size: 10px; }
+
+/* ---------- Full-page scene; connection failures overlay rather than resize it ---------- */
+main { position: relative; flex: 1; min-height: 0; display: flex; }
+.connection-banner { position: absolute; z-index: 20; top: 6px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 7px; max-width: calc(100% - 12px); padding: 6px 8px; border: 1px solid #a64f3b; border-radius: 2px; background: #fff0dc; color: #793425; box-shadow: 2px 2px 0 #241a2633; font-size: 6.5px; }
+.connection-banner button { padding: 2px 6px; flex: none; }
+.connection-banner a { font-size: 6px; white-space: nowrap; }
+.town-panel { flex: 1; min-width: 0; min-height: 0; display: flex; overflow: hidden; background: #172c25; }
+
+/* ---------- Scene: pixel canvases under an SVG/HTML overlay, all in one pixel-snapped stage ---------- */
+/* Children stay in art pixels. Only this stage transforms; the frame needs no bitmap. */
+.town-scene { position: relative; flex: 1; min-height: 0; overflow: hidden; background-color: #172c25; background-image: linear-gradient(45deg, #20372c 25%, transparent 25%, transparent 75%, #20372c 75%), linear-gradient(45deg, #20372c 25%, transparent 25%, transparent 75%, #20372c 75%); background-size: 8px 8px; background-position: 0 0, 4px 4px; }
+.town-stage { position: absolute; left: 0; top: 0; isolation: isolate; transform-origin: 0 0; box-shadow: 0 0 0 1px #18241e, 0 0 0 2px #dfa568, 0 0 0 4px #805039, 0 0 0 5px #ae764a, 0 0 0 6px #111d18; }
+.town-stage::before { content: ""; position: absolute; z-index: -1; inset: -5px; border-top: 2px solid #c08b55; border-bottom: 2px solid #563a2d; pointer-events: none; }
+/* The avenue runs through the frame at both ends: road-coloured gaps over the 6 px border, kerbs included. */
+.town-stage::after { content: ""; position: absolute; left: -6px; right: -6px; top: 173px; height: 14px; pointer-events: none;
+  --road: linear-gradient(#45435a 0 1px, #77768a 1px 2px, #aeaab8 2px 12px, #77768a 12px 13px, #45435a 13px);
+  background: var(--road) left / 6px 100% no-repeat, var(--road) right / 6px 100% no-repeat; }
+.town-scene[data-time=night] .town-stage::after { --road: linear-gradient(#1b1d3d 0 1px, #2f335d 1px 2px, #44497c 2px 12px, #2f335d 12px 13px, #1b1d3d 13px); }
+.town-scene[data-time=dusk] .town-stage::after, .town-scene[data-time=dawn] .town-stage::after { filter: sepia(.25) brightness(.9); }
+.town-stage > canvas, .town-stage > svg, .town-tint { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+.town-stage > canvas { image-rendering: pixelated; pointer-events: none; }
+#town { overflow: visible; pointer-events: none; shape-rendering: crispEdges; }
+#town .station, #town .resident { pointer-events: auto; }
+#town text { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; shape-rendering: auto; }
+.empty-state {
+  position: absolute;
+  left: 236px;
+  top: 136px;
+  max-width: 140px;
+  transform: translate(-50%, -50%);
+  padding: 4px 7px;
+  border: 1px solid #241a26;
+  background: #fff8e6;
+  box-shadow: inset 0 -1px 0 #ead2a2, 2px 2px 0 #241a2640;
+  color: #241a26;
+  font-size: 6.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  line-height: 1.5;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Time of day: dawn and dusk tint the scene. After dark the painted light map (multiply) carries the
+   darkness and the lit places instead; at dusk it comes on at partial strength. */
+.town-tint { pointer-events: none; mix-blend-mode: multiply; background: transparent; }
+.town-scene[data-time=dawn] .town-tint { background: #f6dfd0; }
+.town-scene[data-time=dusk] .town-tint { background: #f3c79e; }
+#town-glow { mix-blend-mode: multiply; opacity: 0; }
+.town-scene[data-time=dusk] #town-glow { opacity: .4; }
+.town-scene[data-time=night] #town-glow { opacity: 1; }
+
+/* ---------- Map landmarks: native buttons over the mailbox and notice-board sprites ---------- */
+.map-object { position: absolute; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: #241a26; user-select: none; -webkit-user-select: none; }
+.map-object:hover { background: #fff8e633; }
+.map-object[aria-expanded=true] { background: #fff8e640; box-shadow: inset 0 0 0 1px #f8d55a; }
+.map-object:focus-visible { outline: 1px solid var(--focus); outline-offset: 1px; }
+.map-object-label { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); padding: 0 3px; border: 1px solid #241a26; background: #dca060; box-shadow: inset 0 1px 0 #ead2a2; font-size: 5.5px; font-weight: 800; line-height: 7px; letter-spacing: .5px; white-space: nowrap; }
+.mailbox-object.has-mail .map-object-label { background: #f8d55a; box-shadow: inset 0 2px 0 #fff8e6; }
+.gate-object .map-object-label { top: 0; bottom: auto; background: #c2413f; color: #fff8e6; box-shadow: inset 0 1px 0 #f07e5e; }
+#town .milestone-text { font-size: 5px; font-weight: 800; letter-spacing: .5px; fill: #45435a; text-anchor: middle; pointer-events: none; }
+.mail-badge { position: absolute; left: -1px; top: -1px; min-width: 11px; height: 11px; padding: 0 2px; border: 1px solid #241a26; border-radius: 50%; background: #a92d31; color: #fff8e6; font: 800 6px/9px ui-monospace, monospace; text-align: center; }
+.notice-face { position: absolute; left: 5px; top: 5px; width: 64px; height: 28px; padding: 1px 2px; text-align: left; color: #382c26; }
+#notice-stats { display: flex; flex-direction: column; gap: .5px; font-size: 5.5px; font-weight: 650; line-height: 7.5px; white-space: nowrap; }
+#notice-stats strong { font-weight: 850; font-variant-numeric: tabular-nums; }
+.notice-connection { position: absolute; right: 2px; top: 2px; display: flex; align-items: center; gap: 1.5px; font-size: 4.5px; line-height: 6px; font-weight: 800; }
+.connection-lamp { display: inline-block; width: 3px; height: 3px; background: #c89237; border: .5px solid #382c26; box-shadow: inset .5px .5px #ffffff77; }
+.notice-object[data-connection=live] .connection-lamp { background: #388343; }
+.notice-object[data-connection=error] .connection-lamp { background: #c2413f; }
+.notice-object[data-connection=error] .notice-connection { color: #a22f2d; }
+
+/* Save points use the same pixel sprite in the map, stop markers and cards. */
+#save-points { position: absolute; inset: 0; pointer-events: none; }
+.save-point { width: 30px; height: 32px; pointer-events: auto; }
+.save-icon { width: 16px; height: 16px; image-rendering: pixelated; vertical-align: -3px; }
+.save-point .save-icon { position: absolute; top: 0; left: 10px; width: 10px; height: 10px; }
+.save-prop { position: absolute; left: 8px; top: 12px; width: 14px; height: 14px; image-rendering: pixelated; }
+.save-point .map-object-label { background: #d5e9d3; box-shadow: inset 0 2px 0 #fff8e6; }
+#popover-content .save-intro { margin: 0 0 12px; color: #53694c; font-size: 11px; }
+#popover-content .parked-resident h3 { margin-top: 0; }
+.parked-resident .panel-actions { margin-top: 8px; padding-top: 8px; }
+.parked-resident .panel-actions button { padding: 5px 10px; font-size: 12px; }
+.checkpoint-card { margin: 10px 0; padding: 10px 12px; border: 1px solid #c3d5b5; border-left: 3px solid #66825d; background: #edf4e5; }
+.checkpoint-card .panel-meta { margin-top: 6px; }
+.interruption-card { border-color: #aaa99f; border-left-color: #777d75; background: #eeeee7; }
+.resume-label { display: block; margin-top: 9px; color: #65765e; font-size: 10px; }
+.resume-path { display: block; width: 100%; margin-top: 3px; padding: 7px; resize: vertical; border: 1px solid #b9c9ac; border-radius: 2px; background: #fffef4; color: #29483d; font: 11px/1.5 ui-monospace, monospace; overflow-wrap: anywhere; }
+.resume-path:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.checkpoint-missing { color: #7a7159; font-size: 11px; }
+/* 自主运行: DSH's /goal, the accent following the phase (red like the flag badge while it runs) */
+.goal-card { margin: 10px 0; padding: 8px 12px; border: 1px solid #e8c9b8; border-left: 3px solid #c2413f; background: #fbf0e8; overflow-wrap: anywhere; }
+#popover-content .goal-card h3 { display: flex; align-items: baseline; gap: 8px; margin: 0; }
+.goal-phase { color: #8e3530; font-size: 11px; font-weight: 600; }
+#popover-content .goal-objective { margin: 5px 0 2px; }
+#popover-content .goal-rounds { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
+#popover-content .goal-blocked { margin: 5px 0 0; }
+.goal-blocked b { margin-right: 4px; color: #6e2438; }
+.goal-card.paused { border-color: #d3d0c4; border-left-color: #8d8a7c; background: #f3f1ea; }
+.goal-card.paused .goal-phase { color: var(--muted); }
+.goal-card.blocked { border-left-color: #6e2438; background: #f8e4df; }
+.goal-card.complete { border-color: #c3d5b5; border-left-color: #66825d; background: #edf4e5; }
+.goal-card.complete .goal-phase { color: #4c6a45; }
+
+/* ---------- Plates: pixel boards with crisp text (signs, station plaques, nameplates) ---------- */
+.plate-edge, .nameplate-edge { fill: #241a26; }
+.plate-face { fill: #dca060; }
+.plate-light { fill: #ead2a2; }
+.plate text { font-size: 5.5px; font-weight: 700; fill: #241a26; text-anchor: middle; }
+.plate-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fill: #7c4a33; }
+.room-sign .plate-face { fill: var(--sign); }
+.room-sign .plate-light { fill: #fff8e6; fill-opacity: .3; }
+.room-sign text { font-size: 7px; font-weight: 800; letter-spacing: .5px; fill: var(--sign-text); }
+.room-workflow .plate-face, .room-population .plate-face { fill: #fff8e6; }
+.room-workflow .plate-light, .room-population .plate-light { fill: #ffffff; }
+.room-workflow text { font-weight: 600; }
+.station { cursor: pointer; }
+.station-plate text { font-size: 6.5px; }
+.prop-caption { font: 700 4px ui-monospace, monospace; fill: #241a26; }
+.station.selected .station-plate .plate-face { fill: #fff8e6; }
+.station:focus-visible .station-bracket { display: inline; stroke: #9cc7ff; }
+.station:focus-visible { outline: none; }
+.station-hit { fill: transparent; }
+.station-bracket { display: none; fill: none; stroke: #f8d55a; stroke-width: 1px; transform: translate(.5px, .5px); }
+.station.active .station-bracket { display: inline; }
+.station.active .station-plate .plate-face { fill: #f8d55a; }
+.station.active .station-plate .plate-light { fill: #fff8e6; }
+.station:hover .station-plate .plate-face { fill: #ead2a2; }
+
+/* Plaques and the gate: summary, then one start row (workspace · command · start), hint underneath. */
+.plaque-summary { font-size: 13px; line-height: 1.8; }
+.plaque-start { margin-top: 14px; padding: 12px; border: 1px solid #e3d4ae; background: #fbf4e3; box-shadow: inset 0 2px 0 #fffaf0; }
+.start-row { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+.start-row select { flex: 1 1 220px; min-width: 0; height: 36px; padding: 0 8px; border: 1px solid #b7a985; border-radius: 0; background: #fffef8; color: var(--ink); font: inherit; font-size: 12px; text-overflow: ellipsis; }
+.plaque-command { flex: 0 1 auto; display: flex; min-width: 0; }
+.start-row > .plaque-command:only-child { flex: 1 1 auto; }
+.plaque-command input { min-width: 16ch; max-width: 100%; height: 36px; padding: 0 10px; field-sizing: content; border: 1px dashed #b9a57a; border-radius: 0; background: #fffef8; color: #365e47; font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; }
+.start-row > .plaque-command:only-child input { flex: 1; }
+.start-row .primary { flex: none; height: 36px; padding: 0 18px; border: 2px solid #241a26; border-radius: 0; background: #365e47; color: #fffef5; box-shadow: inset 0 -3px 0 #22402f, inset 0 2px 0 #5c8a68; font-size: 13px; font-weight: 750; }
+.start-row .primary:hover { background: #2f5440; }
+#popover-content .plaque-hint { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+/* A resident on a plaque: name and stage on the left, its two actions on the right. */
+.plaque-resident { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 10px; }
+.plaque-resident > strong, .plaque-resident > p { grid-column: 1; }
+.plaque-resident strong { overflow-wrap: anywhere; }
+#popover-content .plaque-resident p { margin: 4px 0 0; }
+.plaque-resident .panel-actions { grid-column: 2; grid-row: 1 / 3; flex-wrap: nowrap; gap: 6px; margin: 0; padding: 0; border: 0; }
+.plaque-resident button { padding: 4px 10px; font-size: 11px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- Residents: sprites live on the canvas; this layer is the button, nameplate and speech ---------- */
+.resident { cursor: pointer; outline: none; }
+.resident-anchor { fill: transparent; }
+.resident .selection { fill: none; stroke: #fff8e6; stroke-width: 1px; transform: translate(.5px, .5px); opacity: 0; }
+.resident:hover .selection { opacity: 1; }
+.resident:focus-visible .selection { opacity: 1; stroke: #9cc7ff; }
+.resident.selected .selection { opacity: 1; stroke: #f8d55a; }
+.nameplate-bg { fill: #fff8e6; }
+.resident.needsYou .nameplate-bg, .resident.selected .nameplate-bg { fill: #f8d55a; }
+.resident.paused .nameplate-bg { fill: #ddebd5; }
+.resident.interrupted .nameplate-bg { fill: #d4d6d0; }
+.resident.interrupted .nameplate-text, .resident.interrupted .nameplate-number { fill: #666c64; }
+.nameplate-text { font-size: 5.5px; font-weight: 700; fill: #241a26; }
+.nameplate-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; fill: #7c4a33; }
+.nameplate-glyph { font-weight: 800; }
+.nameplate-compact { display: none; font-size: 5.5px; font-weight: 800; fill: #241a26; text-anchor: middle; }
+.compact .nameplate-text { visibility: hidden; }
+.compact .nameplate-dot { display: none; }
+.compact .nameplate-compact { display: inline; font-size: 8px; transform: translateY(1px); }
+.compact .nameplate-edge { x: -12px; width: 24px; height: 11px; }
+.compact .nameplate-bg { x: -11px; width: 22px; height: 9px; }
+
+/* One-shot events: the speech bubble is UI; the resident's motion runs on the sprite loop. */
+.event-bubble { pointer-events: none; opacity: 0; }
+.bubble-bg { fill: #fff8e6; stroke: #241a26; stroke-width: 1px; transform: translate(.5px, .5px); }
+.event-bubble text { font-size: 5.5px; font-weight: 700; fill: #241a26; text-anchor: middle; }
+.resident.event-playing .event-bubble { animation: one-shot 3.6s steps(5, end) both; }
+.resident.event-hypothesis-refuted .bubble-bg { fill: #f07e5e; }
+
+/* ---------- Token use: resident card line and per-stage bars under the trail ---------- */
+.cost-line { color: #4a2c2a; }
+.token-breakdown { margin: 12px 0 6px; padding-top: 8px; border-top: 1px solid #e2d5b3; }
+.token-stage { display: grid; grid-template-columns: minmax(90px, 1.2fr) minmax(40px, 1fr) 82px; align-items: center; gap: 8px; min-height: 25px; font-size: 11px; }
+.token-stage-name { overflow-wrap: anywhere; }
+.token-stage-name b { margin-left: 4px; padding: 1px 3px; background: #f7e2d2; color: #a13735; font-size: 9px; }
+.token-bar { height: 6px; background: #ebe3d0; }
+.token-bar i { display: block; height: 100%; background: #b0703e; box-shadow: inset 0 1px 0 #dca060; }
+.token-stage.peak .token-bar i { background: #c2413f; box-shadow: inset 0 1px 0 #f07e5e; }
+.token-stage-value { text-align: right; color: #7c4a33; font-variant-numeric: tabular-nums; }
+.token-stage-value small { display: inline-block; width: 30px; margin-left: 4px; color: var(--muted); font-size: 10px; }
+#popover-content .trail-note { margin-top: 6px; font-size: 11px; color: #718074; }
+/* ---------- Panels: one centred modal for every map object; the town keeps animating under the scrim ---------- */
+.town-popover { width: min(760px, calc(100vw - 48px)); max-width: none; max-height: calc(100vh - 48px); overflow: hidden; }
+.town-popover[open] { display: flex; flex-direction: column; }
+/* The header strip and chip take the colour of where the panel belongs; the notice board and inbox are wood. */
+.town-popover[data-accent=construction] { --accent: #4c86c6; --accent-ink: #2b4a7c; }
+.town-popover[data-accent=detective] { --accent: #9270bb; --accent-ink: #563d7c; }
+.town-popover[data-accent=clinic], .town-popover[data-accent=gate] { --accent: #c2413f; --accent-ink: #6e2438; }
+.popover-top, .dialog-top { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 20px; border-top: 4px solid var(--accent); border-bottom: 2px solid #e6d3a8; background: #f6ecd6; }
+.popover-top h2, .dialog-top h2 { flex: 1; min-width: 0; font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
+.panel-chip { flex: none; padding: 1px 8px; background: var(--accent-ink); color: #fff8e6; box-shadow: inset 0 -2px 0 #0000004d, inset 0 2px 0 #ffffff33; font-size: 12px; font-weight: 750; line-height: 20px; letter-spacing: .5px; }
+#close-popover, #close-info { flex: none; width: 32px; height: 32px; padding: 0 0 2px; border: 2px solid #241a26; border-radius: 0; background: #fff8e6; box-shadow: inset 0 -2px 0 #e2cfa4; font-size: 20px; line-height: 1; }
+#close-popover:hover, #close-info:hover { background: #f8d55a; }
+#popover-content { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 16px 20px 20px; font-size: 12px; line-height: 1.6; scrollbar-width: thin; }
+#popover-content h3 { margin: 16px 0 8px; font-size: 14px; font-weight: 750; line-height: 1.4; overflow-wrap: anywhere; }
+#popover-content h3:first-child { margin-top: 0; }
+/* Lists of residents, letters, leavers and roles use the width: two columns where they fit. */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 10px; }
+.plaque-resident, .parked-resident, .letter { min-width: 0; padding: 10px 12px; border: 1px solid #e3d4ae; background: #fffdf7; box-shadow: 0 2px 0 #ece0c3; }
+/* Resident card: who and where beside how it runs; progress, tokens and the work log run full width below. */
+.card-top.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 8px 24px; align-items: start; }
+.card-side > :first-child { margin-top: 0; }
+.card-progress { margin-top: 14px; padding-top: 12px; border-top: 1px solid #ecdfc0; }
+.mode-legend { list-style: none; display: grid; gap: 4px; margin: 10px 0 0; padding: 8px 10px; border: 1px dashed #dcc9a0; color: #5d6d58; font-size: 11px; }
+#popover-content .mode-legend { margin-top: 10px; }
+.mode-legend li { display: flex; align-items: center; gap: 6px; }
+.mode-legend b { color: var(--ink); }
+.mode-icon { flex: none; width: 16px; height: 16px; image-rendering: pixelated; }
+#popover-content .repo { margin: 2px 0 0; font: 11px/1.5 ui-monospace, monospace; color: #86927c; }
+#popover-content .resident-workflow { margin: 4px 0 0; color: #5d6d58; }
+.resident-workflow b { margin-left: 4px; font: 700 10px ui-monospace, monospace; color: #7f8e70; }
+#popover-content code { padding: 1px 4px; border-radius: 2px; background: #eaf0de; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+#popover-content p { margin: 6px 0; overflow-wrap: anywhere; }
+#popover-content ul, #popover-content ol { margin: 0; }
+
+/* Resident detail */
+.status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 1px 8px; border: 1px solid var(--status-color, #9ca59a); border-radius: 3px; background: #fffef5; font-size: 11px; font-weight: 700; line-height: 18px; white-space: nowrap; }
+.status-pill::before { content: ""; flex: none; width: 7px; height: 7px; background: var(--status-color, #9ca59a); }
+.panel-meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 12px; margin: 10px 0 0; }
+.panel-meta dt { color: var(--muted); font-size: 11px; line-height: 19px; white-space: nowrap; }
+.panel-meta dd { margin: 0; overflow-wrap: anywhere; }
+.stage-trail { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; }
+.stage-trail li { display: inline-flex; align-items: center; gap: 4px; margin-right: 4px; font-size: 11px; line-height: 18px; color: #8a9580; }
+.stage-trail li + li::before { content: ""; flex: none; width: 6px; height: 2px; background: #d3ddc7; }
+.trail-dot { flex: none; display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 3px; border: 1px dashed #b7c3ad; border-radius: 3px; background: #fffef5; color: #8a9580; font: 700 10px/1 ui-monospace, monospace; }
+.stage-trail li.done::before, .stage-trail li.active::before { background: #8caa78; }
+.stage-trail li.done .trail-dot { border: 1px solid #8caa78; background: #e6efda; color: #3f6a47; }
+.stage-trail li.active .trail-dot { border: 1px solid #b0742a; background: #d18a33; color: #fff; box-shadow: 0 2px 0 #e2d5b3; }
+.stage-trail li[aria-current=step] > .trail-name { padding: 0 7px; border: 1px solid #c99a45; border-radius: 3px; background: #fff3cf; color: #5a3f1f; font-weight: 750; box-shadow: 0 2px 0 #e2d5b3; }
+.stage-trail li.skipped .trail-dot { border-color: #d3d8cc; color: #a7ae9f; text-decoration: line-through; }
+.stage-trail li.skipped .trail-name { color: #7b8372; }
+.trail-rollback { padding: 0 4px; border: 1px solid #c8b09a; border-radius: 3px; background: #f5e9dc; color: #845d3c; font: 700 10px/16px ui-monospace, monospace; }
+.panel-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed #d5dfca; }
+.town-popover .session-link { font-size: 12px; }
+.panel-actions .session-link, .answer-options .session-link { padding: 5px 12px; border: 1px solid #bfa66c; border-radius: 3px; background: #fffdf5; box-shadow: 0 2px 0 #e2d5b3; text-decoration: none; }
+.panel-actions .session-link:hover, .answer-options .session-link:hover { background: #e7ca76; }
+.session-link { display: inline-block; font-size: 10px; white-space: nowrap; }
+.handoff-note { display: block; font-size: 10px; line-height: 14px; color: #9a703c; }
+.skill { display: inline-block; max-width: 100%; padding: 2px 5px; border: 1px solid #dde2cf; border-radius: 3px; background: #eff1e6; color: #617150; font: 10px/13px ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+
+/* Decision trail: append-only rows with evidence pointers, then the audit and the cross-model review */
+.work-log { margin-top: 14px; padding-top: 10px; border-top: 1px solid #e2d5b3; }
+#popover-content .work-log h3 { display: flex; align-items: baseline; gap: 8px; }
+.trail-state { color: var(--muted); font-size: 11px; font-weight: 600; }
+/* Host text can be long and unbroken (paths, JSON, version strings): every track is capped at the card width and words may break anywhere. */
+.work-log { overflow-wrap: anywhere; }
+.trail-rows { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 0; }
+.trail-row { padding: 7px 9px; border: 1px solid #dfe5d4; border-left: 3px solid #8caa78; border-radius: 3px; background: #fbfcf6; }
+.trail-row.superseded { border-left-color: #c9c4b4; background: #f4f2ec; }
+.trail-row-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; line-height: 17px; }
+.trail-row-head > * { min-width: 0; }
+.trail-row-head b { color: #7c4a33; font: 700 11px ui-monospace, monospace; }
+.trail-result { max-width: 100%; margin-left: auto; padding: 0 6px; border: 1px solid #c9d6bc; border-radius: 3px; background: #eef4e6; color: #365e47; font-weight: 650; }
+#popover-content .trail-decision { margin: 3px 0 0; font-weight: 650; }
+.trail-row.superseded .trail-decision { color: #8a8a7c; text-decoration: line-through; }
+#popover-content .trail-why { margin: 2px 0 0; color: #5d6d58; font-size: 11px; }
+#popover-content .trail-link { margin: 4px 0 0; color: #9a703c; font-size: 11px; }
+.evidence-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.evidence-chip { max-width: 100%; padding: 0 6px; overflow: hidden; border: 1px solid #d6dacb; border-radius: 3px; background: #f3f5ec; color: #4c5a46; font: 11px/18px ui-monospace, SFMono-Regular, Menlo, monospace; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+button.evidence-chip { border-color: #9ab6cf; background: #eaf2fa; color: #2b4a7c; }
+button.evidence-chip:hover { background: #d8e8f7; }
+button.evidence-chip[aria-expanded=true] { border-color: #2b4a7c; background: #2b4a7c; color: #fff; }
+.evidence-viewer { margin-top: 7px; border: 1px solid #9ab6cf; border-radius: 3px; background: #f6f9fc; }
+.evidence-viewer:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.evidence-viewer header { display: flex; align-items: center; gap: 6px; padding: 3px 3px 3px 8px; border-bottom: 1px solid #d3e0ec; }
+.evidence-viewer header code { font: 700 11px ui-monospace, monospace; overflow-wrap: anywhere; }
+.evidence-error { padding: 0 5px; border-radius: 2px; background: #f7e2d2; color: #a13735; font-size: 10px; font-weight: 700; }
+.evidence-close { flex: none; width: 24px; height: 24px; margin-left: auto; padding: 0; border: 0; background: none; font-size: 16px; line-height: 1; }
+#popover-content .evidence-label { margin: 6px 8px 2px; color: var(--muted); font-size: 10px; }
+.evidence-pre { max-height: 180px; margin: 0 8px 8px; padding: 6px 7px; overflow: auto; border: 1px solid #dfe5d4; background: #fffef8; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+#popover-content .evidence-note { margin: 8px; color: var(--muted); }
+.trail-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 8px 10px; margin-top: 10px; }
+.trail-checks > section { padding: 8px 10px; border: 1px solid #e2d5b3; border-radius: 3px; background: #fbf7ec; }
+#popover-content .trail-checks h4 { margin: 0 0 4px; font-size: 12px; }
+#popover-content .trail-findings, #popover-content .trail-flags { margin: 4px 0 0; padding-left: 16px; font-size: 11px; overflow-wrap: anywhere; }
+.trail-findings b { margin-right: 4px; color: #a13735; }
+.trail-findings li.info b { color: var(--muted); }
+.trail-refs { margin-right: 4px; color: #7c4a33; font: 700 10px ui-monospace, monospace; }
+#popover-content .reviewed-by { margin: 4px 0 0; color: #365e47; font: 650 11px ui-monospace, monospace; }
+#popover-content .no-flags { margin: 2px 0 0; color: #3f6a47; font-weight: 700; }
+#popover-content .trail-pending, #popover-content .trail-meta { margin: 0; color: var(--muted); font-size: 11px; }
+
+/* Mailbox letters: cards in the two-column grid */
+#popover-content .letter-title { margin: 0; font-size: 13px; line-height: 18px; }
+.letter-context { margin: 3px 0 4px; font-size: 11px; color: #8a7959; }
+.letter p { color: #5f5a42; white-space: pre-line; overflow-wrap: anywhere; }
+.letter-options { margin: 6px 0 0; padding-left: 18px; font-size: 11px; color: #8a7959; }
+.answer-options { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.empty-mail { padding: 22px 10px; text-align: center; color: #7b815f; font-size: 12px; line-height: 2; }
+
+/* Notice board */
+.notice-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px 24px; }
+.notice-top + .notice-group, .notice-group + .notice-group { margin-top: 16px; }
+.notice-top > .notice-group { margin-top: 0; }
+#popover-content .notice-group h3 { margin: 0 0 4px; font-size: 11px; letter-spacing: 1px; color: var(--muted); }
+.overview-stats { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.settings-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 5px 0; }
+.settings-actions button, .connection-detail button { padding: 5px 10px; font-size: 12px; }
+.settings-actions button[aria-pressed=true] { background: var(--green); color: #fff; border-color: var(--green); }
+.connection-detail { color: #5d7257; font-size: 11px; }
+.connection-detail.error { color: #a22f2d; }
+.inbox-group + .inbox-group { margin-top: 18px; padding-top: 12px; border-top: 2px solid #dccaa3; }
+.inbox-group > h3 { color: #7c5632; }
+.notice-list, .leaver-list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); column-gap: 18px; }
+.notice-list li, .leaver { border-bottom: 1px solid #efe6d0; }
+.notice-entry { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 6px; border: 0; border-radius: 3px; background: none; color: inherit; font-size: 12px; line-height: 1.4; text-align: left; text-decoration: none; overflow-wrap: anywhere; }
+.notice-entry:hover { background: #f0f4e3; }
+.status-dot { flex: none; width: 8px; height: 8px; margin-top: 5px; background: var(--status-color, #9ca59a); }
+.notice-entry > span:not(.status-dot) { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.notice-entry strong { font-weight: 650; }
+.notice-meta { font-size: 10px; color: #7c856f; }
+a.notice-entry .notice-meta { color: #365e47; }
+/* 最近离开: one row per finished session, newest first, in the notice board and the gate panel. */
+.leaver { display: flex; align-items: flex-start; gap: 8px; padding: 6px 4px; }
+.leaver-kind { flex: none; width: 60px; padding: 0 4px; border: 1px solid #c9d6bc; border-radius: 3px; background: #eef4e6; color: #365e47; font: 700 11px/18px ui-monospace, monospace; text-align: center; }
+.leaver-kind.pr, .leaver-kind.mr { border-color: #e5b3a2; background: #fbe9e1; color: #a13735; }
+.leaver-kind.local { border-color: #d6c7a6; background: #f7efdc; color: #7c4a33; }
+.leaver-main { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.leaver-main strong { font-weight: 650; }
+.leaver-link { font: 11px/1.5 ui-monospace, monospace; }
+.leaver .session-link { flex: none; margin-top: 1px; font-size: 11px; }
+
+/* Model roles: compact role cards, two columns where they fit. */
+.model-roles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; margin-top: 12px; }
+.model-main-note { padding: 10px 12px; border-left: 3px solid #739260; background: #edf2e5; }
+.model-selection-status { color: #53694c; }
+.model-role { min-width: 0; margin: 0; padding: 10px 12px 12px; border: 1px solid #e3d4ae; background: #fffdf7; }
+.model-role legend { padding: 0 5px; font-size: 14px; font-weight: 750; }
+#popover-content .model-role-use, #popover-content .model-default { margin: 0 0 8px; color: var(--muted); }
+/* One route per line: model and reasoning side by side, the remove button at the end. */
+.model-route { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto; gap: 3px 6px; align-items: end; padding: 8px 0; border-top: 1px dashed #e3d4ae; }
+.model-route > label { grid-row: 1; font-size: 11px; font-weight: 650; color: #5d6d58; }
+.model-route > label[for^="reasoning-"] { grid-column: 2; }
+.model-route > select { grid-row: 2; width: 100%; min-width: 0; height: 32px; padding: 0 6px; border: 1px solid #b7a985; border-radius: 0; background: #fffef8; color: var(--ink); font: inherit; font-size: 12px; text-overflow: ellipsis; }
+.model-route > select[data-model-select] { grid-column: 1; }
+.model-route:not(:has([data-model-reasoning])) > select[data-model-select] { grid-column: 1 / 3; }
+.model-route > button { grid-row: 2; grid-column: 3; height: 32px; }
+.model-role button, .town-popover[data-kind=models] .panel-actions button { padding: 5px 10px; font-size: 12px; }
+.town-popover[data-kind=models] :disabled { opacity: .6; cursor: not-allowed; }
+.model-save { border-color: #365e47; background: #365e47; color: #fffef5; font-weight: 700; }
+.model-save:hover:not(:disabled) { background: #294b38; }
+.model-save-status { color: #365e47; }
+.model-error { color: #a22f2d; }
+
+/* ---------- Modal frame (panels and help): the stage's stepped wooden border around parchment ---------- */
+dialog {
+  --accent: #b0703e; --accent-ink: #7c4a33;
+  padding: 0; border: 2px solid #fdf3dc; border-radius: 0; background: #fffaf0; color: var(--ink);
+  box-shadow: 0 0 0 2px #241a26, 0 0 0 5px #c08b55, 0 0 0 7px #805039, 0 0 0 9px #241a26, 10px 12px 0 9px #050c0980;
+  transition: opacity .12s ease-out, scale .12s ease-out, overlay .12s allow-discrete, display .12s allow-discrete;
+}
+dialog:not([open]) { opacity: 0; scale: .97; }
+@starting-style { dialog[open] { opacity: 0; scale: .97; } }
+/* A flat scrim, no blur: the town keeps animating underneath at no extra GPU cost. */
+dialog::backdrop { background: #09140f8c; opacity: 1; transition: opacity .12s ease-out, overlay .12s allow-discrete, display .12s allow-discrete; }
+dialog:not([open])::backdrop { opacity: 0; }
+@starting-style { dialog[open]::backdrop { opacity: 0; } }
+#info { width: min(570px, calc(100vw - 48px)); max-height: calc(100vh - 48px); }
+#info-content { padding: 17px 20px; font-size: 12px; line-height: 1.9; }
+#info-content p { margin: 6px 0; }
+#info-content strong { font-weight: 700; }
+.help-list { padding-left: 19px; }
+.help-list li { margin: 8px 0; }
+/* Narrow frames: the panel becomes a near-full-width sheet along the bottom. */
+@media (max-width: 560px) {
+  .town-popover { width: calc(100vw - 20px); max-height: calc(100vh - 30px); margin: auto 10px 10px; box-shadow: 0 0 0 2px #241a26, 0 0 0 4px #c08b55, 0 0 0 6px #805039, 0 0 0 8px #241a26; }
+  .popover-top { padding-left: 14px; }
+  #popover-content { padding: 14px; }
+  .start-row .primary { flex: 1 0 100%; }
+}
+
+/* ---------- Quiet mode & reduced motion (the sprite loop also stops; see town.js) ---------- */
+.quiet *, .quiet *::before, .quiet *::after { animation: none !important; }
+.quiet dialog, .quiet dialog::backdrop { transition: none; }
+.quiet .event-playing .event-bubble { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after, ::backdrop { animation: none !important; transition: none !important; }
+  .resident.event-playing .event-bubble { opacity: 1; }
+}
+
+/* ---------- Keyframes ---------- */
+@keyframes one-shot { 0% { opacity: 0; transform: translateY(2px); } 10%, 80% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-2px); } }
+
