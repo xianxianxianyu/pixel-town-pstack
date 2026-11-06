@@ -85,6 +85,8 @@ dsh plugin --profile <profile> add link:"$(pwd)"
 
 新的 `hillclimb` 和 `multi-phase-plan` 流程默认开启日志。其他已启动的流程可以用 **`/pstack-trail [说明]`** 开启。`pstack_log` 记录带证据指针的决策；`pstack_audit` 检查机械性缺口，导出日志和对话摘录，并记录独立复核。在居民卡片里可以查看记录、替代关系、审计发现、复核意见和引用的工具输出。
 
+新的调用证据显式标记为 `kind: "invocation"`，并保存会话内唯一的引用：`seq:<调用事件序号>`；旧记录无序号时使用编码后的 turn/step/provider-ID 元组。历史 `kind: "call"` 记录始终将引用视为不透明的 provider ID，并保留最后匹配行为，即使该 ID 看起来像调用引用也不例外。相对指针在记日志时解析；复用返回的精确指针时使用 `invocation:<ref>`。
+
 审计发现不是正确性关卡。同模型家族复核必须明确披露，不能当成跨家族独立评估。
 
 ### 模型分工

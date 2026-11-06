@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { GOAL_PHASES, attentionItems, createBoard, mailboxItems, mapBoard, openFindings, recentLeavers, residentNameplate, sortResidents, STATUS } from '../board/live-data.js'
+import { GOAL_PHASES, attentionItems, createBoard, evidenceRequest, mailboxItems, mapBoard, openFindings, recentLeavers, residentNameplate, sortResidents, STATUS } from '../board/live-data.js'
 import { ART, CHARACTERS, PLAQUES, PROPS, plaqueForWorkflow } from '../board/art.js'
 import { workflows } from '../lib/workflows.js'
 
@@ -104,6 +104,74 @@ test('decision trails keep the host shape and only ended turns with open finding
   assert.equal(mapped.sessions[2].trail.review, null)
   assert.equal(mapped.sessions[5].trail, null)
   assert.deepEqual(attentionItems(mapped.sessions).map(item => item.id), ['flagged', 'finding'])
+})
+
+test('trail projection preserves invocation and historical call namespaces even for identical refs', () => {
+  const raw = payload([session({
+    trail: {
+      on: true,
+      rows: [{
+        n: 1, at: 1000, workflow: 'bug-fix', stage: 'fix', decision: '保留证据身份',
+        evidence: [
+          { kind: 'call', ref: 'seq:42' },
+          { kind: 'invocation', ref: 'seq:42' },
+          { kind: 'call', ref: 'tuple:%5B%22message-id%22%2C0%2C%22call-id%22%5D' },
+          { kind: 'invocation', ref: 'tuple:%5B%22message-id%22%2C0%2C%22call-id%22%5D' },
+          { kind: 'call', ref: 'call_1' },
+        ],
+      }],
+    },
+  })])
+  const before = structuredClone(raw)
+  const mapped = mapBoard(raw)
+  assert.deepEqual(mapped.sessions[0].trail.rows[0].evidence, [
+    { kind: 'call', ref: 'seq:42' },
+    { kind: 'invocation', ref: 'seq:42' },
+    { kind: 'call', ref: 'tuple:%5B%22message-id%22%2C0%2C%22call-id%22%5D' },
+    { kind: 'invocation', ref: 'tuple:%5B%22message-id%22%2C0%2C%22call-id%22%5D' },
+    { kind: 'call', ref: 'call_1' },
+  ])
+  assert.deepEqual(raw, before)
+})
+
+test('evidence requests distinguish mixed chips in the same row and preserve row and session identity', () => {
+  const historical = evidenceRequest('session-live', 1, { kind: 'call', ref: 'seq:42' })
+  const canonical = evidenceRequest('session-live', 1, { kind: 'invocation', ref: 'seq:42' })
+  assert.deepEqual(historical, {
+    key: '1:call:seq:42',
+    label: 'call:seq:42',
+    url: '../evidence?session=session-live&call=seq%3A42',
+  })
+  assert.deepEqual(canonical, {
+    key: '1:invocation:seq:42',
+    label: 'invocation:seq:42',
+    url: '../evidence?session=session-live&invocation=seq%3A42',
+  })
+  assert.notEqual(historical.key, canonical.key)
+  assert.equal(evidenceRequest('session-live', 2, { kind: 'invocation', ref: 'seq:42' }).key, '2:invocation:seq:42')
+  assert.equal(evidenceRequest('another-session', 1, { kind: 'invocation', ref: 'seq:42' }).url,
+    '../evidence?session=another-session&invocation=seq%3A42')
+})
+
+test('evidence request selectors follow kind alone and encode refs without reinterpreting provider IDs', () => {
+  const refs = [
+    'call_1',
+    'seq:42',
+    'tuple:%5B%22message-id%22%2C0%2C%22call-id%22%5D',
+    'invocation:seq:42',
+    'call:last',
+    'provider:part&invocation=seq:7? space+#/%雪',
+  ]
+  for (const kind of ['call', 'invocation']) {
+    for (const ref of refs) {
+      const request = evidenceRequest('session &+#/雪', 3, { kind, ref })
+      const url = new URL(request.url, 'https://example.test/api/pixel-town-pstack/town/')
+      assert.equal(url.pathname, '/api/pixel-town-pstack/evidence')
+      assert.deepEqual([...url.searchParams], [['session', 'session &+#/雪'], [kind, ref]])
+      assert.equal(request.key, `3:${kind}:${ref}`)
+      assert.equal(request.label, `${kind}:${ref}`)
+    }
+  }
 })
 
 test('goals keep the native DSH shape; a blocked goal needs the user once the turn has ended', () => {

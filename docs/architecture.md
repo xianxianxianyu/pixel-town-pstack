@@ -94,18 +94,20 @@ The optional commands service registers `/pstack-pause [reason]`. It steers a ru
 
 Trails are automatic for new `hillclimb` and `multi-phase-plan` runs, or enabled on another active workflow by `/pstack-trail [note]`.
 
-`pstack_log({ decision, why, evidence, result, supersedes? })` validates one-line text and nonempty evidence. `call:<id>` must reference a committed tool call in that session. Relative references resolve when the row is written:
+`pstack_log({ decision, why, evidence, result, supersedes? })` validates one-line text and nonempty evidence. `call:<providerId>` selects the last committed call with that opaque provider ID; `invocation:<ref>` selects only the exact canonical invocation. Relative references resolve when the row is written:
 
 - `call:last`: latest committed non-`pstack_*` call.
 - `call:last:<toolName>`: latest committed call for that non-`pstack_*` tool.
 - `call:-<n>`: n-th most recent committed non-`pstack_*` call, starting at 1.
 
-Only resolved absolute call IDs are stored and returned. Supplemental pointers are `file:<path>[:line]`, `commit:<sha>`, and `url:<https URL>`; file existence, SHA syntax, and URL scheme are checked at this boundary. Corrections append a superseding row rather than mutating history.
+New call evidence stores `{ kind: "invocation", ref }`: `seq:<n>` uses the `tool/call` event's session sequence number; older records without a sequence use `tuple:<encoded>` where `<encoded>` is `encodeURIComponent(JSON.stringify([turn, step, providerId]))`. Calls and results still pair by that complete tuple, while the raw provider ID is retained separately. Historical `{ kind: "call", ref }` rows always use last-committed provider-ID lookup, including IDs beginning with `seq:` or `tuple:`. Lookup never falls back between these two namespaces. All newly logged relative or provider-ID inputs resolve to the explicitly tagged invocation form before persistence.
+
+Supplemental pointers are `file:<path>[:line]`, `commit:<sha>`, and `url:<https URL>`; file existence, SHA syntax, and URL scheme are checked at this boundary. Corrections append a superseding row rather than mutating history.
 
 `pstack_audit({})` checks missing evidence, success claims contradicted by referenced errors, unlogged stage pivots and successful file-changing calls, and informational superseded rows. Findings are mechanical signals, not proof of semantic correctness or an exhaustive record of all actions. The exports are:
 
-- `trails/<sessionId>.tsv`: `ts, phase, decision, why, evidence, result`, with upstream-compatible TSV cell hygiene.
-- `trails/<sessionId>.transcript.md`: no reasoning; tool arguments capped at 2,000 characters and results at 4,000, retaining both ends when shortened.
+- `trails/<sessionId>.tsv`: `ts, phase, decision, why, evidence, result`, with upstream-compatible TSV cell hygiene; canonical pointers render as `invocation:<ref>`, while historical pointers retain `call:<providerId>`.
+- `trails/<sessionId>.transcript.md`: no reasoning; paired tool-call and result headings distinguish canonical `invocation:<ref>` labels from raw `call:<providerId>` labels. Tool arguments are capped at 2,000 characters and results at 4,000, retaining both ends when shortened.
 
 A separate reviewer reads both exports. Its result is recorded with `pstack_audit({ review: { model, flags } })`; empty flags means No flags. Same-family review must be disclosed and is not an independent eval judge. Ended turns with non-informational audit findings or review flags appear under **需要你注意**. Evidence chips retrieve authenticated tool details, capped at 2,000 argument characters and 6,000 output characters.
 
@@ -130,7 +132,7 @@ The API prefix is **`/api/pixel-town-pstack`**:
 | `GET /board` | DSH-authenticated; `{ workflows, deliverySkill, legacyWorkflowIds, sessions }`. |
 | `GET /models` | DSH-authenticated; roles, assignments, model-selection availability/allowlist, and an optional error. |
 | `PUT /models` | DSH-authenticated; accepts only `{ assignments }`, validates and atomically saves; invalid input returns 400. |
-| `GET /evidence?session=<id>&call=<id>` | DSH-authenticated; `{ name, args, isError, output }`; unknown session/call returns 404. |
+| `GET /evidence?session=<id>&invocation=<ref>` or `…&call=<providerId>` | DSH-authenticated; exactly one selector is required. `invocation` resolves only canonical refs; `call` resolves only opaque provider IDs using legacy last-match behavior. Returns `{ name, args, isError, output }`; unknown session/evidence returns 404. |
 | `GET` / `HEAD /town/…` | Public static shell/assets from a fixed allowlist; no session data is embedded in them. |
 
 The town polls the board every 1.5 seconds while visible, suspending polling when hidden. Errors show a disconnected indicator and retry UI. Static assets are read live from the linked package; rebuilding and restarting is necessary for host and bundled client changes.

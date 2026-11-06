@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import type { BoardSession, SessionRecord } from '../shared/fold.ts'
-import { auditTrail, committedCalls, exportTrail, recordObject, renderTranscript } from '../shared/trail.ts'
+import { auditTrail, committedCalls, exportTrail, findCommittedCall, recordObject, renderTranscript } from '../shared/trail.ts'
 import type { EvidencePointer, TrailReview, TrailRow } from '../shared/trail.ts'
 
 function oneLine(value: unknown, name: string): string {
@@ -32,12 +32,20 @@ export async function logTrail(raw: unknown, board: BoardSession, records: reado
           for (let i = calls.length - 1; i >= 0; i--) {
             const call = calls[i]!
             if (call.name.startsWith('pstack_') || (tool !== undefined && call.name !== tool)) continue
-            if (--remaining === 0) { resolved = call.id; break }
+            if (--remaining === 0) { resolved = call.ref; break }
           }
         }
         if (resolved === undefined) throw new Error(`无法解析 ${pointer}：本会话没有匹配的已完成非 pstack_ 工具调用。`)
         ref = resolved
-      } else if (!calls.some(call => call.id === ref)) throw new Error(`call:${ref} 不是本会话已完成的工具调用。`)
+      } else {
+        const call = findCommittedCall(calls, { kind, ref })
+        if (!call) throw new Error(`call:${ref} 不是本会话已完成的工具调用。`)
+        ref = call.ref
+      }
+      evidence.push({ kind: 'invocation', ref })
+      continue
+    } else if (kind === 'invocation') {
+      if (!findCommittedCall(calls, { kind, ref })) throw new Error(`${pointer} 不是本会话已完成的工具调用。`)
     } else if (kind === 'file') {
       const path = ref.replace(/:[1-9]\d*$/u, '')
       if (!board.cwd && !path.startsWith('/')) throw new Error('会话缺少 cwd，不能解析相对文件证据。')

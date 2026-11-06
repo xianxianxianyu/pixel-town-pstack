@@ -173,7 +173,7 @@ export function apply(ctx: HostContext, config: Config): void {
 
   ctx.tools.register({
     name: 'pstack_log',
-    description: '追加工作日志的一条决策或验证结果；证据优先 call:last:bash，也可 call:last、call:last:<工具名>、call:-<n>（倒数第 n 个，排除 pstack_*），宿主解析为已完成调用的真实 id 并回显；或 call:<id>、存在的 file:、commit:、https 的 url:。错行只能用 supersedes 追加纠正。',
+    description: '追加工作日志的一条决策或验证结果；证据优先 call:last:bash，也可 call:last、call:last:<工具名>、call:-<n>（倒数第 n 个，排除 pstack_*），或 call:<providerId>（仅按原始 provider id 取最后完成的调用）；宿主统一存为 kind=invocation 的会话内唯一 ref 并回显，可用 invocation:<ref> 精确重引。其他证据：存在的 file:、commit:、https 的 url:。错行只能用 supersedes 追加纠正。',
     parameters: {
       type: 'object', additionalProperties: false,
       properties: {
@@ -269,8 +269,13 @@ export function apply(ctx: HostContext, config: Config): void {
       path: '/api/pixel-town-pstack/evidence', methods: ['GET'], requestBody: 'buffered',
       async fetch(request) {
         const query = new URL(request.url).searchParams
+        const invocation = query.get('invocation'), providerId = query.get('call')
+        if ((invocation === null) === (providerId === null)) {
+          return Response.json({ error: 'Specify exactly one evidence selector: invocation or call' }, { status: 400 })
+        }
         const session = routeCtx.sessions.list().find(session => session.header.id === query.get('session'))
-        const evidence = session && evidenceCall(sessionRecords(session), query.get('call') ?? '')
+        const evidence = session && evidenceCall(sessionRecords(session), invocation === null
+          ? { kind: 'call', ref: providerId! } : { kind: 'invocation', ref: invocation })
         return evidence ? Response.json(evidence) : Response.json({ error: 'Evidence not found' }, { status: 404 })
       },
     })

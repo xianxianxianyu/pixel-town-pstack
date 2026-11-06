@@ -1,5 +1,5 @@
 import { openSessionLink, workspacesFromMessage } from './navigation.js';
-import { GOAL_PHASES, attentionItems, mailboxItems, openFindings, recentLeavers, residentNameplate, sortResidents } from './live-data.js';
+import { GOAL_PHASES, attentionItems, evidenceRequest, mailboxItems, openFindings, recentLeavers, residentNameplate, sortResidents } from './live-data.js';
 import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueForWorkflow, rasterize } from './art.js';
 
 (() => {
@@ -1221,24 +1221,24 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
   const clockTime = (at) => new Date(at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
   const stageName = (workflow, stage) => B.workflow(workflow)?.stages.find((candidate) => candidate.id === stage)?.name ?? stage ?? '';
   const rowRefs = (rows) => rows.length ? `<span class="trail-refs">${rows.map((n) => `#${n}`).join(' ')}</span>` : '';
-  // One inline viewer at a time, keyed by row and call so the same call in two rows opens under the row used.
-  let evidence = null; // { session, key, call, state: 'loading' | 'ready' | 'missing' | 'failed', data }
+  // One inline viewer at a time, keyed by row and explicit pointer kind as well as ref.
+  let evidence = null; // { session, row, key, label, url, state: 'loading' | 'ready' | 'missing' | 'failed', data }
   function evidenceChip(s, row, { kind, ref }) {
-    if (kind === 'call') {
-      const key = `${row.n}:${ref}`;
-      return `<button type="button" class="evidence-chip call" data-evidence="${escape(key)}" aria-expanded="${evidence?.session === s.id && evidence.key === key}" title="${escape(`call:${ref}`)}">call:${escape(ref.length > 12 ? `…${ref.slice(-10)}` : ref)}</button>`;
+    if (kind === 'call' || kind === 'invocation') {
+      const { key, label } = evidenceRequest(s.id, row.n, { kind, ref });
+      return `<button type="button" class="evidence-chip ${kind}" data-evidence="${escape(key)}" data-evidence-row="${row.n}" data-evidence-kind="${kind}" data-evidence-ref="${escape(ref)}" aria-expanded="${evidence?.session === s.id && evidence.key === key}" title="${escape(label)}">${kind}:${escape(ref.length > 12 ? `…${ref.slice(-10)}` : ref)}</button>`;
     }
     if (kind === 'url' && ref.startsWith('https://')) return `<a class="evidence-chip url" href="${escape(ref)}" target="_blank" rel="noopener" title="${escape(ref)}">${escape(ref.slice(8))}</a>`;
     return `<span class="evidence-chip" title="${escape(`${kind}:${ref}`)}">${escape(kind)}:${escape(kind === 'commit' ? ref.slice(0, 7) : ref)}</span>`;
   }
   function evidenceViewer() {
-    const { call, state, data } = evidence;
+    const { label, state, data } = evidence;
     const args = typeof data?.args === 'string' ? data.args : JSON.stringify(data?.args ?? null, null, 2);
     const body = state === 'loading' ? '<p class="evidence-note">正在读取…</p>'
       : state === 'missing' ? '<p class="evidence-note">找不到这次调用的记录：主机不提供证据，或会话已不在当前 DSH 里。</p>'
       : state === 'failed' ? '<p class="evidence-note">读取失败，稍后再试。</p>'
       : `<p class="evidence-label">参数</p><pre class="evidence-pre">${escape(args)}</pre><p class="evidence-label">输出</p><pre class="evidence-pre">${escape(data.output ?? '')}</pre>`;
-    return `<section class="evidence-viewer" data-viewer="${escape(evidence.key)}" tabindex="-1" aria-label="${escape(`证据 call:${call}`)}"><header><code>${escape(state === 'ready' ? data.name : `call:${call}`)}</code>${state === 'ready' && data.isError ? '<span class="evidence-error">出错</span>' : ''}<button type="button" class="evidence-close" data-action="evidence-close" aria-label="收起证据">×</button></header>${body}</section>`;
+    return `<section class="evidence-viewer" data-viewer="${escape(evidence.key)}" tabindex="-1" aria-label="${escape(`证据 ${label}`)}"><header><code>${escape(state === 'ready' ? `${label} · ${data.name}` : label)}</code>${state === 'ready' && data.isError ? '<span class="evidence-error">出错</span>' : ''}<button type="button" class="evidence-close" data-action="evidence-close" aria-label="收起证据">×</button></header>${body}</section>`;
   }
   function trailCard(s) {
     const { trail } = s;
@@ -1248,7 +1248,7 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
       <p class="trail-decision">${escape(row.decision)}</p>${row.why ? `<p class="trail-why">${escape(row.why)}</p>` : ''}
       ${row.evidence.length ? `<div class="evidence-chips">${row.evidence.map((item) => evidenceChip(s, row, item)).join('')}</div>` : ''}
       ${row.supersedes ? `<p class="trail-link">更正 #${row.supersedes}</p>` : ''}${row.supersededBy ? `<p class="trail-link">已被 #${row.supersededBy} 更正</p>` : ''}
-      ${evidence?.session === s.id && evidence.key.startsWith(`${row.n}:`) ? evidenceViewer() : ''}</li>`).join('');
+      ${evidence?.session === s.id && evidence.row === row.n ? evidenceViewer() : ''}</li>`).join('');
     const open = openFindings(trail), fixed = trail.audit?.findings.filter((finding) => finding.kind === 'superseded') ?? [];
     const audit = !trail.audit ? '<p class="trail-pending">还没核对</p>'
       : `<p class="trail-meta">${escape(clockTime(trail.audit.at))} 核对 · ${open.length ? `${open.length} 条待处理` : '没有待处理的问题'}</p>${open.length + fixed.length ? `<ul class="trail-findings">${[...open, ...fixed].map((finding) => `<li class="${finding.kind === 'superseded' ? 'info' : ''}"><b>${escape(FINDINGS[finding.kind] ?? finding.kind)}</b>${rowRefs(finding.rows)}${finding.stage ? `<span class="trail-refs">${escape(stageName(s.workflow, finding.stage))}</span>` : ''} ${escape(finding.detail)}</li>`).join('')}</ul>` : ''}`;
@@ -1283,14 +1283,14 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     return checkpointCard(item) || '<p class="checkpoint-missing">主机未提供记录，请到会话里查看。</p>';
   }
   const viewerElement = () => $('popover-content').querySelector('[data-viewer]');
-  async function toggleEvidence(sessionId, key) {
-    if (evidence?.session === sessionId && evidence.key === key) { closeEvidence(); return; }
-    const call = key.slice(key.indexOf(':') + 1);
-    const request = evidence = { session: sessionId, key, call, state: 'loading', data: null };
+  async function toggleEvidence(sessionId, row, pointer) {
+    const descriptor = evidenceRequest(sessionId, row, pointer);
+    if (evidence?.session === sessionId && evidence.key === descriptor.key) { closeEvidence(); return; }
+    const request = evidence = { session: sessionId, row, ...descriptor, state: 'loading', data: null };
     refreshPanel();
     viewerElement()?.focus();
     try {
-      const response = await fetch(`../evidence?${new URLSearchParams({ session: sessionId, call })}`, { credentials: 'same-origin', cache: 'no-store' });
+      const response = await fetch(request.url, { credentials: 'same-origin', cache: 'no-store' });
       if (response.ok) { request.data = await response.json(); request.state = 'ready'; }
       else request.state = response.status === 404 ? 'missing' : 'failed';
     } catch {
@@ -1714,7 +1714,7 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     const button = event.target.closest('[data-resident]');
     if (button) openPanel({ kind: 'resident', id: button.dataset.resident });
     const chip = event.target.closest('[data-evidence]');
-    if (chip && panel?.kind === 'resident') void toggleEvidence(panel.id, chip.dataset.evidence);
+    if (chip && panel?.kind === 'resident') void toggleEvidence(panel.id, Number(chip.dataset.evidenceRow), { kind: chip.dataset.evidenceKind, ref: chip.dataset.evidenceRef });
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'quiet') toggleQuiet();
     else if (action === 'help') showHelp();

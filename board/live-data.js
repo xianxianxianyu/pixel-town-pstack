@@ -75,6 +75,15 @@ function mapTrail(trail, current) {
   };
 }
 
+// A provider ID is opaque: only the pointer's kind chooses the evidence endpoint selector.
+export function evidenceRequest(sessionId, row, { kind, ref }) {
+  return {
+    key: `${row}:${kind}:${ref}`,
+    label: `${kind}:${ref}`,
+    url: `../evidence?${new URLSearchParams({ session: sessionId, [kind]: ref })}`,
+  };
+}
+
 // DSH goal phases the board names; any other shape is ignored.
 export const GOAL_PHASES = { active: '进行中', paused: '已暂停', blocked: '受阻', complete: '已完成' };
 function mapGoal(goal) {

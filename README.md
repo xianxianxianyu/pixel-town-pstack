@@ -85,6 +85,8 @@ A checkpoint includes intent, completed work, current state, next action, releva
 
 Trails start automatically for new `hillclimb` and `multi-phase-plan` runs. Use **`/pstack-trail [note]`** to enable one for another active workflow. `pstack_log` records decisions with evidence pointers; `pstack_audit` checks for mechanical gaps, exports the trail and transcript, and records a separate review. Inspect rows, supersession, audit findings, review flags, and cited tool output in the resident card.
 
+New call evidence is explicitly tagged `kind: "invocation"` and stores a session-unique reference: `seq:<call-event-seq>`, or an encoded turn/step/provider-ID tuple for older records. Historical `kind: "call"` rows always mean opaque provider IDs and retain their last-match behavior, even when an ID looks like an invocation reference. Relative pointers resolve when logged; copy a returned canonical pointer as `invocation:<ref>`.
+
 Audit findings are not correctness gates. A same-family review must be disclosed; it is not an independent cross-family evaluation.
 
 ### Model roles

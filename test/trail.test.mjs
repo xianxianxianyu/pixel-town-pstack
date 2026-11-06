@@ -27,9 +27,11 @@ function harness(services = {}, configRoot = root) {
     },
   }
   apply(ctx, { root: configRoot })
-  const call = (id, name, args = {}, output = 'ok', isError = false) => {
-    append('tool/call', { turn: 1, step: 1, callId: id, name, arguments: JSON.stringify(args) })
-    append('tool/result', { turn: 1, step: 1, message: { toolCallId: id, isError, content: [{ type: 'text', text: output }] } })
+  const call = (id, name, args = {}, output = 'ok', isError = false, scope = { turn: 1, step: 1 }) => {
+    const ref = `seq:${seq}`
+    append('tool/call', { ...scope, callId: id, name, arguments: JSON.stringify(args) })
+    append('tool/result', { ...scope, message: { toolCallId: id, isError, content: [{ type: 'text', text: output }] } })
+    return ref
   }
   const execute = async (name, input) => {
     const id = `host-${seq}`
@@ -52,10 +54,11 @@ const input = { decision: '选线性去重', why: '重复扫描是热点', evide
 
 for (const pointer of ['call:proof', 'file:evidence.txt', 'file:evidence.txt:1', `file:${join(root, 'evidence.txt')}:1`, 'commit:abcdef0', 'url:https://example.com/proof']) {
   test(`pstack_log accepts ${pointer.split(':', 1)[0]} evidence ${pointer}`, async () => {
-    const h = harness(); await h.stage(); h.call('proof', 'bash', { command: 'node --test' })
+    const h = harness(); await h.stage(); const ref = h.call('proof', 'bash', { command: 'node --test' })
     const { row } = await h.execute('pstack_log', { ...input, evidence: [pointer] })
     assert.equal(row.n, 1); assert.equal(row.workflow, 'hillclimb'); assert.equal(row.stage, 'ground')
-    assert.equal(row.evidence[0].ref, pointer.slice(pointer.indexOf(':') + 1))
+    assert.deepEqual(row.evidence, [pointer === 'call:proof'
+      ? { kind: 'invocation', ref } : { kind: pointer.split(':', 1)[0], ref: pointer.slice(pointer.indexOf(':') + 1) }])
     assert.equal(h.board().trail.rows.length, 1)
   })
 }
@@ -63,21 +66,22 @@ for (const [pointer, id] of [
   ['call:last', 'bash-new'], ['call:last:bash', 'bash-new'], ['call:last:read', 'read-proof'],
   ['call:-1', 'bash-new'], ['call:-2', 'read-proof'], ['call:-3', 'bash-old'],
 ]) {
-  test(`pstack_log resolves ${pointer}, stores and echoes the absolute id, and excludes pstack calls`, async () => {
+  test(`pstack_log resolves ${pointer}, stores and echoes the invocation ref, and excludes pstack calls`, async () => {
     const h = harness(); await h.stage()
-    h.call('bash-old', 'bash', { command: 'baseline' }, 'baseline proof')
+    const refs = { 'bash-old': h.call('bash-old', 'bash', { command: 'baseline' }, 'baseline proof') }
     h.call('audit-noise', 'pstack_audit', {}, '{}')
-    h.call('read-proof', 'read', { path: 'evidence.txt' }, 'read proof')
-    h.call('bash-new', 'bash', { command: 'node --test' }, 'tests passed')
+    refs['read-proof'] = h.call('read-proof', 'read', { path: 'evidence.txt' }, 'read proof')
+    refs['bash-new'] = h.call('bash-new', 'bash', { command: 'node --test' }, 'tests passed')
     h.call('log-noise', 'pstack_log', {}, '{}')
     h.append('tool/call', { turn: 1, step: 1, callId: 'pending', name: 'bash', arguments: '{}' })
     const { row } = await h.execute('pstack_log', { ...input, evidence: [pointer] })
-    assert.deepEqual(row.evidence, [{ kind: 'call', ref: id }])
+    const ref = refs[id]
+    assert.deepEqual(row.evidence, [{ kind: 'invocation', ref }])
     assert.deepEqual(h.board().trail.rows[0].evidence, row.evidence)
-    const echoedAgain = await h.execute('pstack_log', { ...input, evidence: [`call:${row.evidence[0].ref}`] })
+    const echoedAgain = await h.execute('pstack_log', { ...input, evidence: [`invocation:${row.evidence[0].ref}`] })
     assert.deepEqual(echoedAgain.row.evidence, row.evidence)
     const response = await h.routes.get('/api/pixel-town-pstack/evidence').fetch(
-      new Request(`https://host/api/pixel-town-pstack/evidence?session=session-trail&call=${id}`))
+      new Request(`https://host/api/pixel-town-pstack/evidence?${new URLSearchParams({ session: 'session-trail', invocation: row.evidence[0].ref })}`))
     assert.equal(response.status, 200)
     assert.equal((await response.json()).name, id === 'read-proof' ? 'read' : 'bash')
   })
@@ -100,13 +104,178 @@ test('relative pointers reject when there are no committed non-pstack calls', as
 test('call:last follows commit order rather than call start order', async () => {
   const h = harness(); await h.stage()
   h.append('tool/call', { turn: 1, step: 1, callId: 'slow', name: 'bash', arguments: '{}' })
+  const slowRef = `seq:${h.events.at(-1).seq}`
   h.call('quick', 'read', {}, 'quick proof')
   h.append('tool/result', { turn: 1, step: 1, message: { toolCallId: 'slow', isError: false, content: [{ type: 'text', text: 'slow proof' }] } })
   const { row } = await h.execute('pstack_log', { ...input, evidence: ['call:last'] })
-  assert.deepEqual(row.evidence, [{ kind: 'call', ref: 'slow' }])
+  assert.deepEqual(row.evidence, [{ kind: 'invocation', ref: slowRef }])
+})
+for (const sequenced of [true, false]) {
+  test(`pstack_log pins reused provider IDs through evidence route and audit (${sequenced ? 'event sequence' : 'legacy tuple'})`, async () => {
+    const h = harness(); await h.stage()
+    const providerId = 'reused:/?%'
+    const earlierSeqRef = h.call(providerId, 'bash', { command: 'node --test earlier' }, 'earlier tests passed')
+    if (!sequenced) delete h.events.at(-2).seq
+    const earlier = (await h.execute('pstack_log', { ...input, evidence: ['call:last:bash'] })).row
+    const earlierRef = sequenced ? earlierSeqRef : 'tuple:%5B1%2C1%2C%22reused%3A%2F%3F%25%22%5D'
+    assert.deepEqual(earlier.evidence, [{ kind: 'invocation', ref: earlierRef }])
+
+    const laterSeqRef = h.call(providerId, 'bash', { command: 'node --test later' }, 'FAIL later test', true, { turn: 1, step: 2 })
+    if (!sequenced) delete h.events.at(-2).seq
+    const later = (await h.execute('pstack_log', { ...input, evidence: ['call:last'] })).row
+    const laterRef = sequenced ? laterSeqRef : 'tuple:%5B1%2C2%2C%22reused%3A%2F%3F%25%22%5D'
+    assert.deepEqual(later.evidence, [{ kind: 'invocation', ref: laterRef }])
+    const relative = (await h.execute('pstack_log', { ...input, evidence: ['call:-2'] })).row
+    assert.deepEqual(relative.evidence, earlier.evidence)
+    const echoed = (await h.execute('pstack_log', { ...input, evidence: [`invocation:${earlierRef}`] })).row
+    assert.deepEqual(echoed.evidence, earlier.evidence)
+    assert.deepEqual(h.board().trail.rows.map(row => row.evidence[0].ref), [earlierRef, laterRef, earlierRef, earlierRef])
+
+    const route = h.routes.get('/api/pixel-town-pstack/evidence')
+    for (const [ref, command, output, isError] of [
+      [earlierRef, 'node --test earlier', 'earlier tests passed', false],
+      [laterRef, 'node --test later', 'FAIL later test', true],
+    ]) {
+      const response = await route.fetch(new Request(`https://host/api/pixel-town-pstack/evidence?${new URLSearchParams({ session: 'session-trail', invocation: ref })}`))
+      assert.equal(response.status, 200)
+      assert.deepEqual(await response.json(), { name: 'bash', args: JSON.stringify({ command }, null, 2), isError, output })
+    }
+    const { audit, tsv, transcript } = await h.execute('pstack_audit', {})
+    assert.deepEqual(audit.findings.map(({ kind, rows }) => ({ kind, rows })), [{ kind: 'claim-contradicts', rows: [2] }])
+    assert.deepEqual(h.board().trail.audit.findings, audit.findings)
+    const exported = await readFile(tsv, 'utf8'), text = await readFile(transcript, 'utf8')
+    for (const ref of [earlierRef, laterRef]) {
+      assert.ok(exported.includes(`invocation:${ref}`))
+      assert.ok(text.includes(`Tool call ${providerId} · bash · invocation:${ref} · call:${providerId}`))
+      assert.ok(text.includes(`Tool result ${providerId} · invocation:${ref} · call:${providerId}`))
+    }
+  })
+}
+test('historical bare provider IDs keep last-match evidence and audit while new logs persist unique refs', async () => {
+  const h = harness(); await h.stage()
+  h.call('reused', 'bash', { command: 'node --test earlier' }, 'earlier tests passed')
+  h.call('legacy-log', 'pstack_log', {}, JSON.stringify({ row: {
+    n: 1, at: 1001, workflow: 'hillclimb', stage: 'ground', ...input, evidence: [{ kind: 'call', ref: 'reused' }],
+  } }))
+  const laterRef = h.call('reused', 'bash', { command: 'node --test later' }, 'FAIL later test', true, { turn: 1, step: 2 })
+  assert.deepEqual(h.board().trail.rows[0].evidence, [{ kind: 'call', ref: 'reused' }])
+  const response = await h.routes.get('/api/pixel-town-pstack/evidence').fetch(
+    new Request('https://host/api/pixel-town-pstack/evidence?session=session-trail&call=reused'))
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {
+    name: 'bash', args: JSON.stringify({ command: 'node --test later' }, null, 2), isError: true, output: 'FAIL later test',
+  })
+  const { audit } = await h.execute('pstack_audit', {})
+  assert.deepEqual(audit.findings.map(({ kind, rows }) => ({ kind, rows })), [{ kind: 'claim-contradicts', rows: [1] }])
+  const { row } = await h.execute('pstack_log', { ...input, evidence: ['call:reused'] })
+  assert.deepEqual(row.evidence, [{ kind: 'invocation', ref: laterRef }])
+  assert.deepEqual(h.board().trail.rows[0].evidence, [{ kind: 'call', ref: 'reused' }])
+})
+for (const sequenced of [true, false]) {
+  test(`historical ${sequenced ? 'seq' : 'tuple'}-shaped provider IDs remain isolated from canonical invocation evidence`, async () => {
+    const h = harness(); await h.stage()
+    const decoySeqRef = h.call('passing-decoy', 'bash', { command: 'node --test decoy' }, 'decoy tests passed')
+    if (!sequenced) delete h.events.at(-2).seq
+    const collisionRef = sequenced ? decoySeqRef : 'tuple:%5B1%2C1%2C%22passing-decoy%22%5D'
+    const failedRef = h.call(collisionRef, 'bash', { command: 'node --test cited' }, 'FAIL cited test', true)
+    const historical = { kind: 'call', ref: collisionRef }
+    h.call('legacy-log', 'pstack_log', {}, JSON.stringify({ row: {
+      n: 1, at: 1001, workflow: 'hillclimb', stage: 'ground', ...input, evidence: [historical],
+    } }))
+    assert.deepEqual(h.board().trail.rows[0].evidence, [historical])
+    const raw = (await h.execute('pstack_log', { ...input, evidence: [`call:${collisionRef}`] })).row
+    assert.deepEqual(raw.evidence, [{ kind: 'invocation', ref: failedRef }])
+    const canonical = (await h.execute('pstack_log', { ...input, evidence: [`invocation:${collisionRef}`] })).row
+    assert.deepEqual(canonical.evidence, [{ kind: 'invocation', ref: collisionRef }])
+    assert.deepEqual(h.board().trail.rows.map(row => row.evidence), [[historical], raw.evidence, canonical.evidence])
+
+    const route = h.routes.get('/api/pixel-town-pstack/evidence')
+    for (const [selector, command, output, isError] of [
+      [{ call: collisionRef }, 'node --test cited', 'FAIL cited test', true],
+      [{ invocation: failedRef }, 'node --test cited', 'FAIL cited test', true],
+      [{ invocation: collisionRef }, 'node --test decoy', 'decoy tests passed', false],
+    ]) {
+      const response = await route.fetch(new Request(`https://host/api/pixel-town-pstack/evidence?${new URLSearchParams({ session: 'session-trail', ...selector })}`))
+      assert.equal(response.status, 200)
+      assert.deepEqual(await response.json(), { name: 'bash', args: JSON.stringify({ command }, null, 2), isError, output })
+    }
+    const { audit, tsv, transcript } = await h.execute('pstack_audit', {})
+    assert.deepEqual(audit.findings.map(({ kind, rows }) => ({ kind, rows })), [
+      { kind: 'claim-contradicts', rows: [1] }, { kind: 'claim-contradicts', rows: [2] },
+    ])
+    assert.ok(audit.findings[0].detail.includes(`call:${collisionRef} 显示失败`))
+    assert.ok(audit.findings[1].detail.includes(`invocation:${failedRef} 显示失败`))
+    const exported = await readFile(tsv, 'utf8'), text = await readFile(transcript, 'utf8')
+    assert.deepEqual(exported.trimEnd().split('\n').slice(1).map(line => line.split('\t')[4]), [
+      `call:${collisionRef}`, `invocation:${failedRef}`, `invocation:${collisionRef}`,
+    ])
+    const results = text.split('\n## ').filter(section => section.startsWith('Tool result '))
+    const cited = results.find(section => section.startsWith(`Tool result ${collisionRef} · `))
+    const decoy = results.find(section => section.startsWith('Tool result passing-decoy · '))
+    assert.ok(cited?.startsWith(`Tool result ${collisionRef} · invocation:${failedRef} · call:${collisionRef} · isError=true · `))
+    assert.match(cited, /FAIL cited test/u)
+    assert.doesNotMatch(cited, /decoy tests passed/u)
+    assert.ok(decoy?.startsWith(`Tool result passing-decoy · invocation:${collisionRef} · call:passing-decoy · isError=false · `))
+    assert.match(decoy, /decoy tests passed/u)
+    assert.doesNotMatch(decoy, /FAIL cited test/u)
+    assert.equal(cited.split('\n', 1)[0].includes(` · invocation:${collisionRef} · `), false)
+    assert.equal(decoy.split('\n', 1)[0].includes(` · call:${collisionRef} · `), false)
+  })
+}
+for (const ref of ['seq:999999', 'tuple:%5B9%2C9%2C%22missing%22%5D']) {
+  test(`evidence namespaces never fall back to matching references (${ref.split(':', 1)[0]})`, async () => {
+    const h = harness(); await h.stage()
+    const actualRef = h.call(ref, 'bash', { command: 'node --test cited' }, 'FAIL cited test', true)
+    const route = h.routes.get('/api/pixel-town-pstack/evidence')
+    for (const [selector, status] of [
+      [{ invocation: ref }, 404], [{ call: actualRef }, 404],
+      [{ call: ref }, 200], [{ invocation: actualRef }, 200],
+    ]) {
+      const response = await route.fetch(new Request(`https://host/api/pixel-town-pstack/evidence?${new URLSearchParams({ session: 'session-trail', ...selector })}`))
+      assert.equal(response.status, status)
+      if (status === 200) assert.equal((await response.json()).output, 'FAIL cited test')
+    }
+    for (const pointer of [`invocation:${ref}`, `call:${actualRef}`]) {
+      await assert.rejects(h.execute('pstack_log', { ...input, evidence: [pointer] }), /不是本会话已完成/u)
+    }
+    assert.deepEqual(h.board().trail.rows, [])
+    for (const [i, pointer] of [{ kind: 'invocation', ref }, { kind: 'call', ref: actualRef }].entries()) {
+      h.call(`foreign-log-${i}`, 'pstack_log', {}, JSON.stringify({ row: {
+        n: i + 1, at: 1001 + i, workflow: 'hillclimb', stage: 'ground', ...input, evidence: [pointer],
+      } }))
+    }
+    assert.deepEqual(h.board().trail.rows.map(row => row.evidence), [
+      [{ kind: 'invocation', ref }], [{ kind: 'call', ref: actualRef }],
+    ])
+    assert.deepEqual(auditTrail(h.board(), h.events), [])
+    const { row } = await h.execute('pstack_log', { ...input, evidence: [`call:${ref}`] })
+    assert.deepEqual(row.evidence, [{ kind: 'invocation', ref: actualRef }])
+    assert.deepEqual(auditTrail(h.board(), h.events).map(({ kind, rows }) => ({ kind, rows })), [
+      { kind: 'claim-contradicts', rows: [3] },
+    ])
+  })
+}
+test('unsequenced call refs retain turn, step and provider ID', async () => {
+  const h = harness(); await h.stage()
+  for (const [turn, step, id, output, ref] of [
+    [1, 1, 'reused', 'first turn', 'tuple:%5B1%2C1%2C%22reused%22%5D'],
+    [2, 1, 'reused', 'second turn', 'tuple:%5B2%2C1%2C%22reused%22%5D'],
+    [2, 1, 'other', 'other provider ID', 'tuple:%5B2%2C1%2C%22other%22%5D'],
+  ]) {
+    h.call(id, 'bash', {}, output, false, { turn, step })
+    delete h.events.at(-2).seq
+    const { row } = await h.execute('pstack_log', { ...input, evidence: ['call:last'] })
+    assert.deepEqual(row.evidence, [{ kind: 'invocation', ref }])
+  }
+  for (const [row, output] of h.board().trail.rows.map((row, i) => [row, ['first turn', 'second turn', 'other provider ID'][i]])) {
+    const response = await h.routes.get('/api/pixel-town-pstack/evidence').fetch(
+      new Request(`https://host/api/pixel-town-pstack/evidence?${new URLSearchParams({ session: 'session-trail', invocation: row.evidence[0].ref })}`))
+    assert.equal(response.status, 200)
+    assert.equal((await response.json()).output, output)
+  }
 })
 for (const change of [
-  { evidence: ['call:unknown'] }, { evidence: [] }, { evidence: ['file:missing.txt'] },
+  { evidence: ['call:unknown'] }, { evidence: ['invocation:unknown'] }, { evidence: [] }, { evidence: ['file:missing.txt'] },
   { evidence: ['commit:xyz'] }, { evidence: ['url:http://example.com'] }, { evidence: ['because it passed'] },
   { supersedes: 9 }, { supersedes: 0 }, { decision: 'two\nlines' }, { why: '' }, { result: ' ' },
 ]) {
@@ -144,6 +313,8 @@ test('old workflow logs remain trail:null; new trail manifests opt in only on ne
 test('trail protocol is compact and includes evidence, non-polling review and same-family Attention', () => {
   assert.equal(trailRules.split('\n').length, 7)
   assert.match(trailRules, /命令后立即优先用 call:last:bash/u)
+  assert.match(trailRules, /call:<providerId>（仅按原始 provider id 取最后完成的调用）/u)
+  assert.match(trailRules, /invocation:<ref>（仅按会话内唯一 ref）/u)
   assert.match(trailRules, /一行.*结束回复；结果会自动送达，不要轮询、列出 agents、调用 wait 或 interrupt_agent/u)
   assert.match(trailRules, /Attention.*复核与干活同一模型家族/u)
   assert.match(stageProtocol('hillclimb'), /pstack_audit.*superseding/su)
@@ -266,10 +437,10 @@ test('transcript omits reasoning, includes both message roles and caps arguments
   assert.ok(transcript.length < 7000)
 })
 test('audit atomically exports real TSV/transcript and records review flags and No flags', async () => {
-  const h = harness(); await h.stage(); h.call('proof', 'bash', { command: 'node --test' }, 'actual proof')
+  const h = harness(); await h.stage(); const ref = h.call('proof', 'bash', { command: 'node --test' }, 'actual proof')
   await h.execute('pstack_log', input)
   const audit = await h.execute('pstack_audit', {})
-  assert.match(await readFile(audit.tsv, 'utf8'), /call:proof/u)
+  assert.ok((await readFile(audit.tsv, 'utf8')).includes(`invocation:${ref}`))
   assert.match(await readFile(audit.transcript, 'utf8'), /actual proof/u)
   assert.deepEqual(h.board().trail.audit.findings, [])
   assert.equal((await readdir(join(root, 'trails'))).some(name => name.endsWith('.tmp')), false)
@@ -281,15 +452,26 @@ test('audit atomically exports real TSV/transcript and records review flags and 
   assert.deepEqual(h.board().trail.review.flags, [])
   await assert.rejects(h.execute('pstack_audit', { review: { model: 'reviewer', flags: [{ text: 'bad ref', rows: [999] }] } }))
 })
-test('authenticated evidence route returns capped committed output and 404s for unknown session/call', async () => {
+test('authenticated evidence route returns capped committed output and 404s for unknown session or evidence', async () => {
   const h = harness(); h.call('proof', 'bash', { command: 'x'.repeat(5000) }, 'HEAD' + 'z'.repeat(10000) + 'TAIL')
   const route = h.routes.get('/api/pixel-town-pstack/evidence')
-  const response = await route.fetch(new Request('https://host/api/pixel-town-pstack/evidence?session=session-trail&call=proof'))
+  const response = await route.fetch(new Request('https://host/api/pixel-town-pstack/evidence?session=session-trail&invocation=seq%3A0'))
   const data = await response.json()
   assert.equal(data.name, 'bash'); assert.equal(data.isError, false)
   assert.equal(data.args.length, 2000); assert.equal(data.output.length, 6000)
   assert.match(data.output, /^HEAD.*TAIL$/su)
-  for (const query of ['session=unknown&call=proof', 'session=session-trail&call=unknown']) assert.equal((await route.fetch(new Request(`https://host/api/pixel-town-pstack/evidence?${query}`))).status, 404)
+  for (const query of ['session=unknown&invocation=seq%3A0', 'session=session-trail&call=unknown', 'session=session-trail&invocation=seq%3A999', 'session=session-trail&invocation=tuple%3Aunknown']) {
+    assert.equal((await route.fetch(new Request(`https://host/api/pixel-town-pstack/evidence?${query}`))).status, 404)
+  }
+})
+test('evidence route rejects both selectors or neither selector', async () => {
+  const h = harness(), ref = h.call('proof', 'bash')
+  const route = h.routes.get('/api/pixel-town-pstack/evidence')
+  for (const selector of [{}, { invocation: ref, call: 'proof' }, { invocation: '', call: 'proof' }]) {
+    const response = await route.fetch(new Request(`https://host/api/pixel-town-pstack/evidence?${new URLSearchParams({ session: 'session-trail', ...selector })}`))
+    assert.equal(response.status, 400)
+    assert.deepEqual(await response.json(), { error: 'Specify exactly one evidence selector: invocation or call' })
+  }
 })
 test('call pairing respects model-step identity and inherited session boundaries', () => {
   const h = harness(); h.call('same', 'read', {}, 'first')
