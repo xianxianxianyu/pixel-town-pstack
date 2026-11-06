@@ -1,0 +1,6 @@
+# Host stages, board HTTP route, packaged skills, and the browser town panel.
+- insert:
+    - id: pixel-town-pstack
+      name: dsh-pixel-town-pstack
+      config:
+        root: !!js dshHomePath('pixel-town-pstack')

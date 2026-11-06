@@ -1,0 +1,64 @@
+{
+  "name": "dsh-pixel-town-pstack",
+  "version": "0.1.0",
+  "description": "Pixel Town: log-derived pstack playbook stages and a live session board for DSH.",
+  "license": "AGPL-3.0-or-later",
+  "author": "xianxianxianyu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xianxianxianyu/pixel-town-pstack.git"
+  },
+  "homepage": "https://github.com/xianxianxianyu/pixel-town-pstack#readme",
+  "bugs": {
+    "url": "https://github.com/xianxianxianyu/pixel-town-pstack/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek",
+    "pixel-town",
+    "pstack",
+    "agent-workflows",
+    "session-visualization"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./fold": "./lib/fold.js",
+    "./workflows": "./lib/workflows.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "board",
+    "cordis.patch.yml",
+    "skills",
+    "scripts/replay.mjs",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=22.13.0",
+    "dsh": ">=0.2.1-rc.5 <0.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "~18.3.31",
+    "esbuild": "^0.28.2",
+    "react": "^18.3.1",
+    "typescript": "^6.0.3",
+    "yaml": "^2.8.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  }
+}

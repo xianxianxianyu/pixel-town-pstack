@@ -1,0 +1,104 @@
+import { useEffect, useRef, useState } from 'react'
+import { sessionFromMessage, startSessionFromMessage, workspacesRequestFromMessage } from '../../board/navigation.js'
+import { DELIVERY_SKILL, workflows } from '../shared/workflows.ts'
+import type { ClientContext } from './dsh.ts'
+import { NS, en, zh } from './locales.ts'
+
+export const inject = ['slots', 'locale', 'uiWorkspace', 'workspaces']
+const PANEL_ID = 'pixel-town-pstack.town'
+
+type TownProps = {
+  readonly openSession: ClientContext['uiWorkspace']['openSession']
+  readonly startSession: ClientContext['uiWorkspace']['startSession']
+  readonly workspaces: ClientContext['workspaces']
+  readonly t: (key: string) => string
+  readonly workspaceT: (key: string) => string
+}
+
+function PixelHouse({ size }: { readonly size: number; readonly active: boolean }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" shapeRendering="crispEdges" aria-hidden="true">
+    <path d="M2 10h4V6h4V2h4v4h4v4h4v12h-8v-8h-4v8H2V10Zm2 2v4h4v-4H4Zm12 0v4h4v-4h-4Z" />
+  </svg>
+}
+
+function TownPage({ openSession, startSession, workspaces, t, workspaceT }: TownProps) {
+  const frame = useRef<HTMLIFrameElement>(null)
+  const [failed, setFailed] = useState<'openFailed' | 'startFailed'>()
+  useEffect(() => {
+    const origin = window.location.origin
+    const publishWorkspaces = (): void => {
+      const target = frame.current?.contentWindow
+      if (!target) return
+      const defaultTitle = workspaceT('workspace.defaultName')
+      target.postMessage({
+        type: 'pixel-town-pstack/workspaces',
+        items: workspaces.list.getSnapshot().items.map(workspace => ({
+          id: workspace.workspaceId,
+          // DSH's inline-only workspaceDisplayTitle helper is not in its module table.
+          title: workspace.title === 'default-workspace'
+            ? (defaultTitle === 'workspace.defaultName' ? '默认工作区' : defaultTitle)
+            : workspace.title || workspace.path,
+          path: workspace.path,
+        })),
+      }, origin)
+    }
+    const onMessage = (event: MessageEvent<unknown>): void => {
+      const source = frame.current?.contentWindow ?? null
+      if (workspacesRequestFromMessage(event, source, origin)) {
+        publishWorkspaces()
+        return
+      }
+      const start = startSessionFromMessage(event, source, origin)
+      if (start !== undefined) {
+        if (start.skill !== DELIVERY_SKILL && !workflows.some(workflow => workflow.skill === start.skill)) return
+        if (start.workspaceId !== undefined
+          && !workspaces.list.getSnapshot().items.some(workspace => workspace.workspaceId === start.workspaceId)) return
+        try {
+          startSession(start.workspaceId, { prompt: `/${start.skill} `, whenDraftExists: 'append' })
+          setFailed(undefined)
+        } catch (error) {
+          console.error('[pixel-town-pstack] could not start session', error)
+          setFailed('startFailed')
+        }
+        return
+      }
+      const sessionId = sessionFromMessage(event, source, origin)
+      if (sessionId === undefined) return
+      try {
+        openSession(sessionId)
+        setFailed(undefined)
+      } catch (error) {
+        console.error('[pixel-town-pstack] could not open session', error)
+        setFailed('openFailed')
+      }
+    }
+    window.addEventListener('message', onMessage)
+    const unsubscribe = workspaces.list.subscribe(publishWorkspaces)
+    publishWorkspaces()
+    return () => {
+      window.removeEventListener('message', onMessage)
+      unsubscribe()
+    }
+  }, [openSession, startSession, workspaces, workspaceT])
+  return <section aria-label={t('panel')} style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', minHeight: 0 }}>
+    {failed && <p role="alert" style={{ margin: 0, padding: 12 }}>{t(failed)}</p>}
+    <iframe ref={frame} title={t('panel')} src="/api/pixel-town-pstack/town/?embed=1" style={{ display: 'block', width: '100%', flex: 1, minHeight: 0, border: 0 }} />
+  </section>
+}
+
+export function apply(ctx: ClientContext): void {
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'pixel-town-pstack: dictionaries')
+  const t = ctx.locale.bind(NS)
+  const workspaceT = ctx.locale.bind('workspace')
+  // ui-workspace owns session retention, persistence and revealing the conversation.
+  const openSession = (sessionId: string): void => { ctx.uiWorkspace.openSession(sessionId) }
+  const startSession: TownProps['startSession'] = (workspaceId, options): void => { ctx.uiWorkspace.startSession(workspaceId, options) }
+  ctx.slots.inject('main', () => ctx.slots.register(
+    { name: 'main', key: PANEL_ID, locale: NS, inject: () => ({ openSession, startSession, workspaces: ctx.workspaces, workspaceT }) },
+    TownPage as never,
+  ))
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register(
+    { name: 'sidebar.panellist', id: PANEL_ID, order: 6, locale: NS, label: () => t('panel') },
+    PixelHouse as never,
+  ))
+}

@@ -1,0 +1,7 @@
+node_modules/
+lib/
+.dev/
+/spike/
+/prototypes/
+/PLAN.md
+/scripts/town-ui-proof.mjs
