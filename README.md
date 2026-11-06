@@ -132,7 +132,11 @@ pnpm typecheck
 node scripts/check-public.mjs
 ```
 
-The development helper uses an isolated **`pixel-town-pstack-dev`** profile on port **3998**:
+The privacy check scans Git-listed files in both the working tree and the staged index, including binary metadata and symlink targets. It reports locations without echoing sensitive values; fixing a staged finding also requires staging the correction.
+
+Optionally put local-only, case-insensitive literal substrings in the ignored root file `check-public.local.txt`, one per line; blank lines are ignored.
+
+The development helper uses an isolated **`pixel-town-pstack-dev`** profile on port **3998**, under `DSH_HOME` when set or the default DSH home otherwise:
 
 ```sh
 sh scripts/dev-server.sh

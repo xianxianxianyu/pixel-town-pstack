@@ -132,7 +132,11 @@ pnpm typecheck
 node scripts/check-public.mjs
 ```
 
-开发脚本使用独立的 **`pixel-town-pstack-dev`** profile，默认端口为 **3998**：
+隐私检查扫描 Git 列出的工作区文件和暂存区版本，包括二进制元数据与符号链接目标。报告只给出位置，不回显敏感值；修复暂存区中的问题后，也要将修正后的文件重新暂存。
+
+可选地在仓库根目录被忽略的 `check-public.local.txt` 中填写仅供本地检查的字面子串，每行一项、不区分大小写，空行会被忽略。
+
+开发脚本使用独立的 **`pixel-town-pstack-dev`** profile，默认端口为 **3998**；设置 `DSH_HOME` 时使用该目录，否则使用 DSH 默认主目录：
 
 ```sh
 sh scripts/dev-server.sh
