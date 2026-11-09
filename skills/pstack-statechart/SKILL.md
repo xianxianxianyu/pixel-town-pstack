@@ -92,6 +92,8 @@ Aim for about 20 arrows or fewer, because a busier chart is hard to read. First 
 
 Follow the generated shared diagram protocol appended to this skill. Read the rendering reference at the absolute path supplied with it for the DSH canvas details. Copy the generated `chart.mmd` next to the workspace model, retaining the report and source artifacts. When `canvas-diagram` is available, run `canvas_check` on that workspace file and then present the checked diagram using the available tool's schema. If canvas is unavailable or cannot render it, give the user the Mermaid code block **and** `report.md`, and report the limitation; never imply that an unobserved render succeeded.
 
+`chart.mmd` encodes non-ASCII punctuation as Mermaid entities (`ﬂ°°N¶ß` in titles and `#N;` in labels); dsh-canvas renders these correctly. Inspect the rendered image before judging the text, and do not rewrite a title merely because its raw source contains these entities.
+
 The chart has a budget of 500 states, counted by TLC on the config as written. Above that, it draws only the paths to rules that break; when no rule breaks, the command writes no `chart.mmd`. It still checks each rule, and the report gives the state count and each bug path. Explain the missing chart and show the report rather than fabricating one. To see the whole graph, make the model smaller without disguising the changed bound.
 
 ## Hand off
