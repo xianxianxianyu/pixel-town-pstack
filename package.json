@@ -33,6 +33,9 @@
     "board",
     "cordis.patch.yml",
     "skills",
+    "!skills/pstack-statechart/scripts/test/**",
+    "!skills/pstack-statechart/scripts/package*.json",
+    "!skills/pstack-statechart/scripts/tsconfig.json",
     "scripts/replay.mjs",
     "THIRD_PARTY_NOTICES.md"
   ],

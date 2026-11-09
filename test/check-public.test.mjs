@@ -108,6 +108,22 @@ test('allows only the exact required license address in its attribution file', t
   ].join('\n'))
 })
 
+test('permits parser type declarations only in the byte-identical vendored source', t => {
+  const repo = repository(t)
+  const path = 'skills/pstack-statechart/scripts/frontends/config.ts'
+  const parser = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
+  repo.write(path, parser)
+  assert.equal(repo.check().status, 0)
+  repo.write(path, `${parser}\n${credential}\n`)
+  const changed = repo.check()
+  assert.equal(changed.status, 1)
+  assert.match(changed.stderr, /token assignment/u)
+  assert.ok(!changed.stderr.includes(credential))
+  repo.write(path, parser)
+  repo.write('copied-parser.ts', parser)
+  assert.equal(repo.check().status, 1, 'the exception cannot spread to another file')
+})
+
 test('inspects binary assets for embedded private metadata and reports byte offsets', t => {
   const repo = repository(t)
   const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+kC9sAAAAASUVORK5CYII=', 'base64')

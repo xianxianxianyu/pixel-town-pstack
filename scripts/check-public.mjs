@@ -3,6 +3,7 @@
 
 import { isUtf8 } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { lstatSync, readFileSync, readlinkSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -29,11 +30,18 @@ const licenseEmails = new Map([
   ['THIRD_PARTY_NOTICES.md', new Set(['eemeli\x40gmail.com'])],
 ])
 
+// This byte-pinned upstream parser uses Token type declarations, not credentials.
+// Any source change removes this narrow false-positive exemption automatically.
+const statechartParser = 'skills/pstack-statechart/scripts/frontends/config.ts'
+const statechartParserHash = '5eeab1e755f20a2c83b408c6503fdc9c6b10c971d8dedad3f912bd15f9763daf'
+
 function inspect(text, path) {
   const findings = []
+  const upstreamParser = path === statechartParser && createHash('sha256').update(text).digest('hex') === statechartParserHash
   for (const [rule, pattern] of rules) {
     for (const match of text.matchAll(pattern)) {
       if (rule === 'email address' && (match[0] === publicEmail || licenseEmails.get(path)?.has(match[0]))) continue
+      if (rule === 'token assignment' && upstreamParser) continue
       findings.push({ rule, offset: match.index })
     }
   }
