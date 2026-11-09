@@ -36,6 +36,14 @@ test('surface verification guidance appears once and only for the eight flagged 
   }
 })
 
+test('every workflow protocol carries one diagram rule: canvas-diagram when available, otherwise a mermaid block', () => {
+  for (const workflow of workflows) {
+    const lines = stageProtocol(workflow.id).split('\n').filter(line => line.includes('canvas-diagram'))
+    assert.equal(lines.length, 1, workflow.id)
+    assert.match(lines[0], /`canvas-diagram`.*`\.mmd`.*`canvas_check`.*`present`.*没有就.*`mermaid` 代码块/u, workflow.id)
+  }
+})
+
 test('delivery stages share the opening-a-pr procedure for both forges and local commits', () => {
   const delivery = workflows.flatMap(workflow => workflow.stages.filter(stage => stage.id === 'pr').map(stage => ({ workflow: workflow.id, ...stage })))
   assert.deepEqual(delivery.map(stage => stage.workflow), ['bug-fix', 'feature', 'perf-issue', 'refactoring', 'hillclimb'])

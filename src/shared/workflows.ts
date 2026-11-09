@@ -443,6 +443,9 @@ export function transition(current: StagePosition, input: StageInput): Transitio
 }
 
 
+// Diagrams follow the dsh-canvas public contract (skill name, tool, file suffix) and fall back to plain Mermaid.
+const diagramRule = '要画图（流程、状态、架构、依赖）时：可用技能里有 `canvas-diagram` 就先加载它，把图写成 `.mmd` 文件，`canvas_check` 通过后用 `present` 交付；没有就直接输出 `mermaid` 代码块。'
+
 export function stageProtocol(id: string): string {
   const workflow = getWorkflow(id)
   return [
@@ -456,6 +459,7 @@ export function stageProtocol(id: string): string {
     '阶段只报告进度，不设门槛；可以回退或随时换工作流，小镇会记录实际路径。',
     '启动子 agent 后不轮询；有独立工作就继续，否则说明等待谁并结束回复，结果自动到达。',
     '验证与交付按本技能的 Reply / done 标准执行；最后一步到达、回复结束且助手全部返回后显示完工。',
+    diagramRule,
     ...(workflow.surface ? ['仓库里有 `.dsh/skills/verify-*` 时，复现和验证按它的启动、自检、驱动、证据步骤做；没有就跑真实命令，并在回复里建议用「验证工具」生成一个。'] : []),
     '',
     '## 存档',
