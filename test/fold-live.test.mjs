@@ -974,3 +974,30 @@ test('F13 unknown cwd never invents a relative chart address, while an absolute 
   l.result('absolute', false, 'ok', { turn: 1, step: 2 })
   assert.equal(foldSession(l.events).canvas.path, '/w/plan.mmd')
 })
+
+for (const { name, path, changed, cwd = '/w', expected } of [
+  { name: 'cross-check home path after cd', path: '~/diagram.mmd', changed: true, expected: '~/diagram.mmd' },
+  { name: 'home directory alone after cd', path: '~', changed: true, expected: '~' },
+  { name: 'named user is an ordinary relative path', path: '~user/x', changed: true, expected: '/w/sub/~user/x' },
+  { name: 'unchanged cwd home-path control', path: '~/diagram.mmd', changed: false, expected: '~/diagram.mmd' },
+  { name: 'home path needs no cwd', path: '~/diagram.mmd', changed: false, cwd: null, expected: '~/diagram.mmd' },
+  { name: 'home directory needs no cwd', path: '~', changed: false, cwd: null, expected: '~' },
+]) {
+  test(`home-relative chart paths: ${name}, with deterministic replay`, () => {
+    const events = [
+      { type: 'session', version: 4, id: 's1', createdAt: 1, cwd },
+      ...(changed ? [{ type: 'working-directory/change', time: 2, seq: 0, data: { cwd: '/w/sub' } }] : []),
+      { type: 'tool/call', time: 3, seq: 1, data: { turn: 1, step: 1, callId: 'c1', name: 'canvas_check', arguments: JSON.stringify({ path }) } },
+      { type: 'tool/result', time: 4, seq: 2, data: { turn: 1, step: 1, message: { role: 'tool', toolCallId: 'c1', isError: false, content: [] } } },
+    ]
+    const full = foldSession(events)
+    assert.deepEqual(full.canvas, { path: expected, at: 4 })
+    assert.equal(full.cwd, cwd)
+    assert.deepEqual(events.reduce(reduce, undefined).board, full)
+    assert.deepEqual(foldSession(JSON.parse(JSON.stringify(events))), full)
+    for (let boundary = 1; boundary < events.length; boundary++) {
+      const prefix = events.slice(0, boundary).reduce(reduce, undefined)
+      assert.deepEqual(events.slice(boundary).reduce(reduce, prefix).board, full)
+    }
+  })
+}

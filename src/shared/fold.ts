@@ -80,7 +80,7 @@ export interface BoardSession {
   readonly interruption: { readonly kind: 'aborted' | 'error' | 'interrupted' | 'blocked' | 'max-tokens'; readonly at: number } | null
   readonly status: 'working' | 'idle' | 'needsYou' | 'finished' | 'paused' | 'interrupted'
   readonly delivery: { readonly kind: 'pr' | 'mr' | 'local'; readonly url?: string; readonly at: number } | null
-  /** Latest passing canvas_check, resolved against the effective working directory at call time. */
+  /** Latest passing canvas_check; cwd-relative paths use the call-time directory, home prefixes stay for DSH. */
   readonly canvas: { readonly path: string; readonly at: number } | null
   readonly finishedAt: number | null
   readonly needs: {
@@ -400,9 +400,12 @@ export function reduce(previous: FoldState | undefined, event: SessionRecord): F
     case 'tool/call': {
       const name = String(data.name ?? '')
       const args = argumentsOf(data.arguments)
-      const canvasPath = name === 'canvas_check' && typeof args.path === 'string' && args.path !== ''
-        && (workingDirectory !== null || isAbsoluteWorkspacePath(args.path))
-        ? resolveWorkspacePath(workingDirectory ?? undefined, args.path) : undefined
+      let canvasPath: string | undefined
+      if (name === 'canvas_check' && typeof args.path === 'string' && args.path !== '') {
+        // DSH's expandHomePrefix expands only ~ and ~/… here, not ~user/….
+        if (args.path === '~' || args.path.startsWith('~/') || isAbsoluteWorkspacePath(args.path)) canvasPath = args.path
+        else if (workingDirectory !== null) canvasPath = resolveWorkspacePath(workingDirectory, args.path)
+      }
       pending = new Map(pending).set(callKey(data, data.callId), {
         name, args, needs: name === 'ask_user_question' ? questionNeeds(args) : null, ...canvasPath === undefined ? {} : { canvasPath },
       })
