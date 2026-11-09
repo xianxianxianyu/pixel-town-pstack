@@ -75,6 +75,22 @@ test('deliveries and finish times survive mapping; 最近离开 lists the newest
   assert.deepEqual(recentLeavers(many).map(item => item.id), many.slice(5).reverse().map(item => item.id))
 })
 
+test('the latest chart keeps the host path and names its file; old hosts and malformed values map to null', () => {
+  const mapped = mapBoard(payload([
+    session({ sessionId: 'posix', canvas: { path: '/work/project/docs/order flow.mmd', at: 7000 } }),
+    session({ sessionId: 'relative', canvas: { path: 'docs\\pay.mmd', at: 7100 } }),
+    session({ sessionId: 'bare', canvas: { path: 'flow.mmd', at: 7200 } }),
+    session({ sessionId: 'old-host' }),
+    ...[null, {}, { path: '' }, { path: 7, at: 1 }, 'flow.mmd'].map((canvas, index) => session({ sessionId: `bad-${index}`, canvas })),
+  ])).sessions
+  assert.deepEqual(mapped.slice(0, 3).map(item => item.canvas), [
+    { path: '/work/project/docs/order flow.mmd', name: 'order flow.mmd', at: 7000 },
+    { path: 'docs\\pay.mmd', name: 'pay.mmd', at: 7100 },
+    { path: 'flow.mmd', name: 'flow.mmd', at: 7200 },
+  ])
+  assert.deepEqual(mapped.slice(3).map(item => item.canvas), Array(6).fill(null))
+})
+
 test('decision trails keep the host shape and only ended turns with open findings or flags need attention', () => {
   const trail = {
     on: true,

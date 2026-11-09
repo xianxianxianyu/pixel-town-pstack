@@ -97,6 +97,12 @@ function mapGoal(goal) {
   };
 }
 
+// The latest checked chart as the host reports it; older hosts send none.
+function mapCanvas(canvas) {
+  if (typeof canvas?.path !== 'string' || !canvas.path) return null;
+  return { path: canvas.path, name: canvas.path.split(/[\\/]/).at(-1) || canvas.path, at: canvas.at ?? null };
+}
+
 // Hosts before the rename send the old workflow ids and no table of them; every id is mapped here, once.
 const OLD_HOST_WORKFLOW_IDS = { requirement: 'feature', 'bug-analysis': 'runtime-forensics' };
 
@@ -150,6 +156,7 @@ export function mapBoard(payload) {
       cost: session.cost ? { ...session.cost, byStage: (session.cost.byStage ?? []).map((entry) => ({ ...entry, workflow: current(entry.workflow) })) } : null,
       trail: mapTrail(session.trail, current), goal: mapGoal(session.goal),
       delivery: session.delivery ? { kind: session.delivery.kind, url: session.delivery.url ?? null, at: session.delivery.at } : null,
+      canvas: mapCanvas(session.canvas),
       finishedAt: session.finishedAt ?? null,
       subagents: Array.from({ length: session.subagentCount }, (_, index) => ({ id: `${session.sessionId}:child:${index}`, role: `助手 ${index + 1}`, status: 'unknown' })),
       skipped: [...session.skipped], history,

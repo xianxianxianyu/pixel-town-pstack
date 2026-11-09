@@ -1,4 +1,4 @@
-import { openSessionLink, workspacesFromMessage } from './navigation.js';
+import { openSessionLink, requestOpenFile, workspacesFromMessage } from './navigation.js';
 import { GOAL_PHASES, attentionItems, evidenceRequest, mailboxItems, openFindings, recentLeavers, residentNameplate, sortResidents } from './live-data.js';
 import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueForWorkflow, rasterize } from './art.js';
 
@@ -968,6 +968,8 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     actor.el.querySelector('.nameplate').setAttribute('transform', `translate(${labelX - x - left},0)`);
   }
   const sessionLink = (s, label) => `<a class="session-link" href="/" target="_blank" rel="noopener" data-open-session="${escape(s.id)}">${label}</a>`;
+  // Only an embedding DSH can open the file beside its conversation; older hosts report no chart.
+  const chartLink = (s) => s.canvas && embedded ? `<button type="button" class="chart-link" data-open-file="${escape(s.canvas.path)}" title="${escape(s.canvas.path)}">最新图表 · ${escape(s.canvas.name)}</button>` : '';
   function playEvent(el, s) {
     clearTimeout(eventTimers.get(s.id));
     el.classList.remove(...[...el.classList].filter((name) => name.startsWith('event-')));
@@ -1339,7 +1341,7 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
         const isPeak = peak > 0 && entry.tokens === peak;
         return `<div class="token-stage${isPeak ? ' peak' : ''}"><span class="token-stage-name">${escape(label)}${isPeak ? '<b>最多</b>' : ''}</span><span class="token-bar" aria-hidden="true"><i style="width:${peak ? entry.tokens / peak * 100 : 0}%"></i></span><span class="token-stage-value">${wan(entry.tokens)}<small>${entry.steps} 步</small></span></div>`;
       }).join('')}</div><p class="trail-note">每一步都要重读全部上下文：步数 × 上下文 ≈ token</p>` : ''}</section>
-      ${trailCard(s)}<div class="panel-actions">${sessionLink(s, '去看看')}</div>`;
+      ${trailCard(s)}<div class="panel-actions">${chartLink(s)}${sessionLink(s, '去看看')}</div>`;
   }
   function noticeList(list, other = false) {
     return `<ul class="notice-list">${sortResidents(list).map((s) => {
@@ -1534,7 +1536,7 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     $('popover-title').textContent = title;
     if (content !== panelContent) {
       const body = $('popover-content'), active = document.activeElement;
-      const focusAttribute = body.contains(active) ? ['data-open-session', 'data-resident', 'data-control', 'data-action', 'data-note', 'data-evidence', 'data-viewer'].find((attribute) => active.hasAttribute(attribute)) : null;
+      const focusAttribute = body.contains(active) ? ['data-open-session', 'data-open-file', 'data-resident', 'data-control', 'data-action', 'data-note', 'data-evidence', 'data-viewer'].find((attribute) => active.hasAttribute(attribute)) : null;
       const focusKey = focusAttribute && active.getAttribute(focusAttribute);
       const selection = active.matches('.resume-path, .plaque-command input') ? [active.selectionStart, active.selectionEnd] : null;
       const scrollTop = body.scrollTop;
@@ -1715,6 +1717,8 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     if (button) openPanel({ kind: 'resident', id: button.dataset.resident });
     const chip = event.target.closest('[data-evidence]');
     if (chip && panel?.kind === 'resident') void toggleEvidence(panel.id, Number(chip.dataset.evidenceRow), { kind: chip.dataset.evidenceKind, ref: chip.dataset.evidenceRef });
+    const file = event.target.closest('[data-open-file]');
+    if (file && panel?.kind === 'resident') requestOpenFile(panel.id, file.dataset.openFile);
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'quiet') toggleQuiet();
     else if (action === 'help') showHelp();
