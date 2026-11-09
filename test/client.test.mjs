@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { runInNewContext } from 'node:vm'
 import test from 'node:test'
 import {
-  openSessionLink, sessionFromMessage, startSessionFromMessage,
+  openFileFromMessage, openSessionLink, requestOpenFile, sessionFromMessage, startSessionFromMessage,
   workspacesFromMessage, workspacesRequestFromMessage,
 } from '../board/navigation.js'
 import { workflows } from '../lib/workflows.js'
@@ -14,6 +14,7 @@ const request = { type: 'pixel-town-pstack/open-session', sessionId: 'session-ex
 const workspaceRequest = { type: 'pixel-town-pstack/workspaces' }
 const startRequest = { type: 'pixel-town-pstack/start-session', skill: 'example-skill' }
 const workspaceItem = { id: 'workspace-project', title: 'Project', path: '/projects/project' }
+const fileRequest = { type: 'pixel-town-pstack/open-file', sessionId: 'session-example', path: 'docs/flow.mmd' }
 
 function assertTrustedSender(validate, data, rejected) {
   const frame = {}
@@ -124,6 +125,28 @@ test('workspace responses require an exact parent message and fully valid id/tit
     assert.equal(workspacesFromMessage({ ...event, data }, parent, origin), undefined)
   }
   assertTrustedSender(workspacesFromMessage, event.data, undefined)
+})
+
+test('open-file requests go to the parent at the town origin and are accepted only in their exact shape', () => {
+  const sent = []
+  const environment = { location: { origin, search: '?embed=1' }, parent: { postMessage: (...args) => sent.push(args) } }
+  requestOpenFile('session-example', 'docs/flow.mmd', environment)
+  assert.deepEqual(sent, [[fileRequest, origin]])
+  const frame = {}
+  const event = { origin, source: frame, data: fileRequest }
+  assert.deepEqual(openFileFromMessage(event, frame, origin), { sessionId: 'session-example', path: 'docs/flow.mmd' })
+  assert.deepEqual(openFileFromMessage({ ...event, data: { ...fileRequest, path: ' /abs path/图 1.mmd ' } }, frame, origin),
+    { sessionId: 'session-example', path: ' /abs path/图 1.mmd ' }, 'the path is passed on unchanged')
+  for (const data of [
+    null, undefined, [], 'docs/flow.mmd', {}, { type: 'other', sessionId: 'session-example', path: 'a.mmd' },
+    request, { type: fileRequest.type, sessionId: 'session-example' }, { type: fileRequest.type, path: 'a.mmd' },
+    { ...fileRequest, extra: true }, Object.create(fileRequest),
+    ...[null, undefined, 7, '', ' \t\n', {}, []].flatMap(value => [{ ...fileRequest, path: value }, { ...fileRequest, sessionId: value }]),
+  ]) {
+    assert.equal(openFileFromMessage({ ...event, data }, frame, origin), undefined)
+  }
+  assertTrustedSender(openFileFromMessage, fileRequest, undefined)
+  assert.equal(sessionFromMessage(event, frame, origin), undefined, 'an open-file request never opens only the session')
 })
 
 // Exercise the package's built artifact and loader contract, never a separately compiled test entry.

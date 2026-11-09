@@ -2,6 +2,7 @@
 const OPEN_SESSION = 'pixel-town-pstack/open-session';
 const START_SESSION = 'pixel-town-pstack/start-session';
 const WORKSPACES = 'pixel-town-pstack/workspaces';
+const OPEN_FILE = 'pixel-town-pstack/open-file';
 
 /**
  * @param {MessageEvent<unknown>} event
@@ -55,6 +56,32 @@ export function sessionFromMessage(event, frame, origin) {
   if (data === undefined || Object.keys(data).length !== 2
     || !Object.hasOwn(data, 'sessionId') || !nonemptyString(data.sessionId)) return;
   return data.sessionId;
+}
+
+/**
+ * Ask the embedding DSH to open one of a session's files beside its conversation.
+ * The target origin keeps the request inside the town's own DSH origin.
+ * @param {string} sessionId
+ * @param {string} path
+ * @param {Window} environment
+ */
+export function requestOpenFile(sessionId, path, environment = window) {
+  environment.parent.postMessage({ type: OPEN_FILE, sessionId, path }, environment.location.origin);
+}
+
+/**
+ * Accept only the current town frame's exact open-file request; the path is passed on unchanged.
+ * @param {MessageEvent<unknown>} event
+ * @param {Window | null} frame
+ * @param {string} origin
+ * @returns {{ sessionId: string, path: string } | undefined}
+ */
+export function openFileFromMessage(event, frame, origin) {
+  const data = messageData(event, frame, origin, OPEN_FILE);
+  if (data === undefined || Object.keys(data).length !== 3
+    || !Object.hasOwn(data, 'sessionId') || !nonemptyString(data.sessionId)
+    || !Object.hasOwn(data, 'path') || !nonemptyString(data.path)) return;
+  return { sessionId: data.sessionId, path: data.path };
 }
 
 /**
