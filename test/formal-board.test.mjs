@@ -34,6 +34,7 @@ async function chromeExecutable() {
 async function exerciseTown() {
   const frame = document.getElementById('board')
   const starts = []
+  const fileOpens = []
   const errors = []
   const ids = ['create-formal-verification-skill', 'maintain-formal-verification-skill']
   let drain
@@ -64,6 +65,7 @@ async function exerciseTown() {
         { id: 'proof-workspace', title: 'Formal board fixture', path: '/fixture/formal-board' },
       ] }, location.origin)
     } else if (event.data?.type === 'pixel-town-pstack/start-session') starts.push(event.data)
+    else if (event.data?.type === 'pixel-town-pstack/open-file') fileOpens.push(event.data)
   })
   const click = selector => {
     const win = frame.contentWindow, doc = frame.contentDocument
@@ -138,6 +140,17 @@ async function exerciseTown() {
       await close()
     }
     const newStarts = starts.splice(0)
+    // Finished work has already left the map; both recent-leaver lists must still open its charts.
+    for (const entry of ['#map-gate', '#map-notice']) {
+      click(entry)
+      const chartButtons = [...frame.contentDocument.querySelectorAll('.leaver [data-open-file]')]
+      must(chartButtons.length === 2, `${entry}: expected charts for two finished sessions, not the old-host row`)
+      for (const button of chartButtons) {
+        click(`[data-open-file="${button.dataset.openFile}"]`)
+        await flushMessages()
+      }
+      await close()
+    }
     click('#map-notice')
     click('[data-action="help"]')
     const help = frame.contentDocument.querySelector('#info-content').textContent
@@ -153,7 +166,7 @@ async function exerciseTown() {
     }
     const advertisedStarts = starts.splice(0)
     await fetch('/result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-      oldLayout, newLayout, allPlaques, oldControl, old, oldStarts, current, newStarts, advertised, advertisedStarts, help, errors,
+      oldLayout, newLayout, allPlaques, oldControl, old, oldStarts, current, newStarts, advertised, advertisedStarts, help, errors, fileOpens,
     }) })
   } catch (error) {
     await fetch('/result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: error.stack }) })
@@ -174,6 +187,13 @@ test('formal plaques render 3+4 and launch only workflows advertised by the host
     ['advertised', payload(workflows.map(workflow => formal.includes(workflow.id)
       ? { ...workflow, skill: `host-advertised-${workflow.id}` } : workflow))],
   ])
+  fixtures.get('new').sessions = [
+    { sessionId: 'finished-a', title: 'Finished A', workflow: formal[0], stage: 'handoff', status: 'finished', finishedAt: 3,
+      canvas: { path: '/fixture/a.mmd', at: 3 } },
+    { sessionId: 'finished-b', title: 'Finished B', workflow: formal[0], stage: 'handoff', status: 'finished', finishedAt: 2,
+      canvas: { path: '/fixture/b.mmd', at: 2 } },
+    { sessionId: 'finished-old', title: 'Old host', workflow: formal[0], stage: 'handoff', status: 'finished', finishedAt: 1 },
+  ].map(session => ({ skipped: [], subagentCount: 0, ...session }))
   const assets = new Map(await Promise.all(['index.html', 'town.js', 'town.css', 'art.js', 'live-data.js', 'navigation.js'].map(async file =>
     [file, await readFile(new URL(`../board/${file}`, import.meta.url))])))
   const result = Promise.withResolvers()
@@ -226,6 +246,10 @@ test('formal plaques render 3+4 and launch only workflows advertised by the host
     const evidence = await result.promise
     assert.equal(evidence.error, undefined, evidence.error)
     assert.deepEqual(evidence.errors, [])
+    assert.deepEqual(evidence.fileOpens, Array.from({ length: 2 }, () => [
+      { type: 'pixel-town-pstack/open-file', sessionId: 'finished-a', path: '/fixture/a.mmd' },
+      { type: 'pixel-town-pstack/open-file', sessionId: 'finished-b', path: '/fixture/b.mmd' },
+    ]).flat())
     assert.equal(evidence.allPlaques.length, 17)
     assert.ok(!evidence.allPlaques.includes('statechart') && !evidence.allPlaques.includes('pstack-statechart'))
     for (const layout of [evidence.oldLayout, evidence.newLayout]) {

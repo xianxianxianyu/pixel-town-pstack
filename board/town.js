@@ -969,7 +969,7 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
   }
   const sessionLink = (s, label) => `<a class="session-link" href="/" target="_blank" rel="noopener" data-open-session="${escape(s.id)}">${label}</a>`;
   // Only an embedding DSH can open the file beside its conversation; older hosts report no chart.
-  const chartLink = (s) => s.canvas && embedded ? `<button type="button" class="chart-link" data-open-file="${escape(s.canvas.path)}" title="${escape(s.canvas.path)}">最新图表 · ${escape(s.canvas.name)}</button>` : '';
+  const chartLink = (s) => s.canvas && embedded ? `<button type="button" class="chart-link" data-open-file="${escape(s.canvas.path)}" data-chart-session="${escape(s.id)}" title="${escape(s.canvas.path)}">最新图表 · ${escape(s.canvas.name)}</button>` : '';
   function playEvent(el, s) {
     clearTimeout(eventTimers.get(s.id));
     el.classList.remove(...[...el.classList].filter((name) => name.startsWith('event-')));
@@ -1200,7 +1200,7 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     if (!list.length) return '<p class="empty-mail">还没有居民离开</p>';
     return `<ul class="leaver-list">${list.map((s) => {
       const kind = s.delivery?.kind, url = kind !== 'local' && s.delivery?.url?.startsWith('https://') ? s.delivery.url : null, at = s.finishedAt ?? s.lastEventAt;
-      return `<li class="leaver"><span class="leaver-kind ${DELIVERY[kind] ? kind : 'done'}">${DELIVERY[kind] ?? '完成'}</span><span class="leaver-main"><strong>${escape(s.title)}</strong><span class="notice-meta">${escape(context(s))}${at ? ` · ${escape(checkpointTime(at))}` : ''}</span>${url ? `<a class="leaver-link" href="${escape(url)}" target="_blank" rel="noopener">${escape(url.slice(8))}</a>` : ''}</span>${sessionLink(s, '去看看')}</li>`;
+      return `<li class="leaver"><span class="leaver-kind ${DELIVERY[kind] ? kind : 'done'}">${DELIVERY[kind] ?? '完成'}</span><span class="leaver-main"><strong>${escape(s.title)}</strong><span class="notice-meta">${escape(context(s))}${at ? ` · ${escape(checkpointTime(at))}` : ''}</span>${url ? `<a class="leaver-link" href="${escape(url)}" target="_blank" rel="noopener">${escape(url.slice(8))}</a>` : ''}${chartLink(s)}</span>${sessionLink(s, '去看看')}</li>`;
     }).join('')}</ul>`;
   }
   const wan = (tokens) => `${(tokens / 10000).toFixed(1)} 万`;
@@ -1718,7 +1718,7 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     const chip = event.target.closest('[data-evidence]');
     if (chip && panel?.kind === 'resident') void toggleEvidence(panel.id, Number(chip.dataset.evidenceRow), { kind: chip.dataset.evidenceKind, ref: chip.dataset.evidenceRef });
     const file = event.target.closest('[data-open-file]');
-    if (file && panel?.kind === 'resident') requestOpenFile(panel.id, file.dataset.openFile);
+    if (file) requestOpenFile(file.dataset.chartSession, file.dataset.openFile);
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'quiet') toggleQuiet();
     else if (action === 'help') showHelp();
