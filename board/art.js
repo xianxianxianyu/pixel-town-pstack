@@ -164,6 +164,28 @@ export const ART = {
       ship: { skills: ['opening-a-pr', 'unslop'], prop: '巡检报告', gag: 'parcel' },
     },
   },
+  'create-formal-verification-skill': {
+    name: '形式化验证', theme: '侦探社', color: '#9270bb',
+    stages: {
+      target: { skills: ['create-formal-verification-skill', 'how'], prop: '关键性质卷宗', gag: 'map' },
+      tool: { skills: ['create-formal-verification-skill'], prop: '验证工具箱', gag: 'compare' },
+      generate: { skills: ['create-formal-verification-skill', 'statechart'], prop: '模型与覆盖记录', gag: 'ink' },
+      prove: { skills: ['principle-prove-it-works'], prop: '破坏性验证证据', gag: 'check' },
+      handoff: { skills: ['technical-writing', 'unslop'], prop: '性质与边界说明', gag: 'parcel' },
+    },
+  },
+  'maintain-formal-verification-skill': {
+    name: '形式化巡检', theme: '侦探社', color: '#9270bb',
+    stages: {
+      locate: { skills: ['maintain-formal-verification-skill'], prop: '覆盖与同步记录', gag: 'map' },
+      baseline: { skills: ['principle-prove-it-works'], prop: '原始检查结果', gag: 'check' },
+      changes: { skills: ['maintain-formal-verification-skill', 'how'], prop: '覆盖代码变更', gag: 'sift' },
+      update: { skills: ['maintain-formal-verification-skill', 'statechart'], prop: '模型修订稿', gag: 'ink' },
+      judge: { skills: ['principle-prove-it-works'], prop: '反例与故障核对表', gag: 'compare' },
+      sync: { skills: ['maintain-formal-verification-skill'], prop: '同步提交印章', gag: 'stamp' },
+      report: { skills: ['technical-writing', 'unslop'], prop: '漂移与缺陷报告', gag: 'parcel' },
+    },
+  },
 };
 
 // Sources are relative to upstream pstack/skills.
@@ -207,6 +229,14 @@ export const PLAQUES = {
   'maintain-verification-skill': {
     id: 'maintain-verification-skill', name: '验证巡检', building: 'detective', source: 'maintain-verification-skill/SKILL.md', kind: 'skill',
     summary: '按源码逐项核对功能地图，再在真实应用里把每个功能走一遍。只改验证说明和脚本，应用真坏了就带证据报告，不改产品代码。最后说明是无需改动、已修正还是受阻。',
+  },
+  'create-formal-verification-skill': {
+    id: 'create-formal-verification-skill', name: '形式化验证', building: 'detective', source: 'create-formal-verification-skill/SKILL.md', kind: 'skill',
+    summary: '找出代码中出错代价高、普通测试难覆盖的承诺，选合适的模型检查器或证明工具，生成项目专用的验证技能。用真实代码的破坏性改动证明检查能抓住问题，再说明性质、边界、假设和重跑命令；发现产品缺陷只报告，不擅自修代码。',
+  },
+  'maintain-formal-verification-skill': {
+    id: 'maintain-formal-verification-skill', name: '形式化巡检', building: 'detective', source: 'maintain-formal-verification-skill/SKILL.md', kind: 'skill',
+    summary: '代码变了以后，按上次同步提交追查覆盖范围内的每项改动，让模型、性质和验证技能重新对应真实代码。先留基线，再更新和重跑，区分验证漂移与产品缺陷；只改验证文件，不为过关削弱性质，并逐项报告已同步、已更新、发现缺陷或受阻。',
   },
   'runtime-forensics': {
     id: 'runtime-forensics', name: '现场取证', building: 'clinic', source: 'poteto-mode/playbooks/runtime-forensics.md', kind: 'playbook',
@@ -384,6 +414,12 @@ export const PROPS = {
   ],
   'maintain-verification-skill': [
     '...aa', '..abba', '.abjjba', '.abjWba', '.abjjba..xy............yx', '.abjjba..xyggggggggggggyx', '..abba...xyg3gguuggggRgyx', '...xy....xygg3gugrrrgrgyx', '...xy....xyRrrgugrgggggyx', '...xy....xyggrrrrrggg3gyx', '...xy....xyggggguggggggyx', '..xxyy...xy............yx', 'zzzzzzzzzzzzzzzzzzzzzzzzzzy', 'yxxxxxxxxxxxxxxxxxxxxxxxxxw', '.xw.....................xw', '.ww.....................ww',
+  ],
+  'create-formal-verification-skill': [
+    '..yyyyyyyyyyyyyyyyyyyyyx', '..yWWWWWWWWWWWWWWWWWWWx', '..yWuuuuWWWWWppppWWWWWx', '..yWuWWuWWWWWpWWpWWWWWx', '..yWuuuuuuuWWppppWWWWWx', '..yWWWWWWWuWWWWpWWWWWWx', '..yWWWWWWWuuuuupWWWW3Wx', '..yWWWWWWWWWWWWpWWW3WWx', '..yWWWWWWWWWWWWpW33WWWx', '..yxxxxxxxxxxxxxxxxxxxw', '....xw............xw', '....xw............xw', 'zzzzzzzzzzzzzzzzzzzzzzzzy', 'yxxxxxxxxxxxxxxxxxxxxxxxw', '.xw...................xw', '.ww...................ww',
+  ],
+  'maintain-formal-verification-skill': [
+    '..yyyyyyyyyyyyyyyyyx', '..yWuuuuWWrrrWWpppWx', '..yWuWWuWWrWrWWpWpWx', '..yWuuuuuurWrrrpppWx', '..yWWWWWWWWWWWWWWWx....jj', '..yWbbbbbbbbWWWWWWx...jWjY', '..yWWWWWWWWWWWWWWWx....jY', '..yW333WWrrrrWWWWWx....b', '..yxxxxxxxxxxxxxxxw...bbb', '....xw.........xw....bWjb', '....xw.........xw....bjjb', '....xw.........xw.....bb', 'zzzzzzzzzzzzzzzzzzzzzzzzy', 'yxxxxxxxxxxxxxxxxxxxxxxxw', '.xw...................xw', '.ww...................ww',
   ],
   'runtime-forensics': [
     'ddddddddddddddddc', 'dcaaaaaaaaaaaaacb', 'dcaBBBBBBBBBoracb', 'dcaBBBBBBBBBrRacb', 'dcaBBBBBBBBBBBacb', 'dcaBBBB4BBBBBBacb', 'dcaBBB4B4BBBBBacb', 'dca444BBB4B444acb', 'dcaBBBBBBB4BBBacb', 'dcaaaaaaaaaaaaacb', 'dcccjcjcccccccccb', 'cbbbbbbbbbbbbbbbb', '.zzzzzzzzzzzzzzzy', '.yxxxxxxxxxxxxxxw', '.xw...........xw', '.xyyyyyyyyyyyyyw', '.ww...........ww',

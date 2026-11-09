@@ -35,11 +35,13 @@ dsh plugin --profile <profile> add link:"$(pwd)"
 
 重启 DSH，在左侧栏打开 **像素小镇 / Pixel Town**。面板与 DSH 同源，使用已有登录状态，不需要另外的 token URL。请保留被链接的源码目录。更新源码后重新安装依赖并构建，再重启 DSH，才能刷新宿主代码、工具、技能目录和客户端桥接。
 
+这次形式化技能更新，**请先退出 DSH，再更新实时链接的 checkout**；重建该目录的 `lib/`，构建成功后再启动。旧宿主会在技能目录缓存未命中时读取新的技能文件，却不认识新流程 id；只更新文件、或未构建就重启，都可能使小镇的整个技能目录消失。木牌的“尚未接入”提示只保护点击，不解决技能提供器的版本不兼容。
+
 ## 选择工作流程
 
 点击木牌，选择工作区，再点**新开会话**。DSH 会打开一个新会话或空白会话，并填入**尚未发送**的斜杠命令草稿；补充任务后由你发送。已有草稿不会被覆盖。也可以直接把下表中的命令粘贴到 DSH 对话里。
 
-全部 **15 块木牌**都可以启动。建筑是工作分类，不是工作流程中的先后阶段；公园是休息角落，不是第十六个流程。
+更新并重启宿主后，全部 **17 块木牌**都可以启动。侦探社有七块，采用 **3+4** 排列；另外两栋楼各五块。建筑是工作分类，不是工作流程中的先后阶段；公园是休息角落，不是另一条流程。旧宿主仍会显示新木牌，但点击后会说明尚未接入，不会提供不可用流程的开工按钮。
 
 | 建筑 | 木牌 | 命令 | 适用任务 |
 | --- | --- | --- | --- |
@@ -53,6 +55,8 @@ dsh plugin --profile <profile> add link:"$(pwd)"
 | 侦探社 | eval | `/pstack-eval` | 对照候选方案、匿名评审结果，并核对实际产物。 |
 | 侦探社 | 验证工具 | `/pstack-create-verification-skill` | 为项目生成并亲自跑通真实应用验证技能。 |
 | 侦探社 | 验证巡检 | `/pstack-maintain-verification-skill` | 检查功能地图中的每项功能，只修验证技能，不改产品代码。 |
+| 侦探社 | 形式化验证 | `/pstack-create-formal-verification-skill` | 验证普通测试难以覆盖的高风险性质，生成可复跑的项目技能。 |
+| 侦探社 | 形式化巡检 | `/pstack-maintain-formal-verification-skill` | 按代码变更同步形式化检查，区分模型漂移与真实缺陷。 |
 | 灭虫急诊站 | 现场取证 | `/pstack-runtime-forensics` | 诊断运行中的故障，再询问是否修复。 |
 | 灭虫急诊站 | 分析抓包 | `/pstack-trace-forensics` | 分析已有 profile、trace、heap snapshot 或日志，不修改代码。 |
 | 灭虫急诊站 | 修 bug | `/pstack-bug-fix` | 复现问题、修复根因，并在原界面验证。 |
@@ -64,6 +68,14 @@ dsh plugin --profile <profile> add link:"$(pwd)"
 **开 PR / MR** 出口使用 **`/pstack-opening-a-pr`**。它是共用的交付技能，不是另一块流程木牌。实现类流程在交付阶段加载它；也可以从出口为已有改动打开未发送的命令草稿。它指导整理有序提交，并在远端、命令行工具和用户工作方式允许时打开非草稿 GitHub PR 或 GitLab MR；条件不足时如实报告本地交付，不会继续合并或盯守。
 
 小镇及宿主工具**不会自主提交、推送或创建 PR/MR**。智能体执行选定技能时可以运行仓库命令，包括遵循 `pstack-opening-a-pr` 进行交付；点击木牌不等于启动一个后台 Git 自动化服务。
+
+### 形式化检查与状态图
+
+形式化流程创建或维护 `<repo>/.dsh/skills/<name>/SKILL.md`，记录覆盖代码、边界、假设和最后同步的提交。必须用负向对照证明检查确实能失败；发现产品缺陷就如实报告，不弱化性质来换取通过。
+
+**`/pstack-statechart`** 是共用工具技能，没有木牌。它检查 TLA+ 模型，用 `chart.mmd` 和 `report.md` 解释性质及最短反例路径。技能提供器注入安装后脚本的绝对路径和一行只读自检命令，生成的项目技能不保存机器相关路径。可用技能中有 `canvas-diagram` 时，把图复制到工作区模型旁，用 `canvas_check` 检查后以 `present` 交付；没有则输出 Mermaid 代码块及报告。
+
+Statechart 需要 **Node ≥22.18**（Node 23 的原生 TypeScript 需要 ≥23.6）和 **Java/TLC**。可使用已由 `mise` 管理的 Temurin 25 与 TLC 1.7.4，或设置 `TLA2TOOLS` 指向 jar、`JAVA` 指向 Java 可执行文件（未设置 `JAVA` 时使用 `PATH` 上的 `java`）。先运行注入的 doctor；管理工具缺失时，上游 runner 会通过 `mise` 获取它们，**首次运行前必须征求用户同意，不擅自安装**。vendored runtime 没有 npm 运行时依赖，不打包测试或 `fast-check`。来源版本、运行时校验和及许可见[第三方声明](THIRD_PARTY_NOTICES.md)。
 
 ## 查看与控制会话
 
@@ -135,6 +147,8 @@ pnpm test
 pnpm typecheck
 node scripts/check-public.mjs
 ```
+
+形式化木牌的行为测试使用独立临时 profile 和随机回环端口，在无头 Chrome/Chromium 中打开真实小镇，不启动 DSH。请自行安装浏览器，或把 `CHROME_BIN` 指向已有可执行文件；测试不会安装它。显式验证旧宿主时，将 `OLD_TOWN_WORKFLOWS` 指向移植前冻结的 `lib/workflows.js`，再运行 `node --test test/formal-board.test.mjs`。
 
 隐私检查扫描 Git 列出的工作区文件和暂存区版本，包括二进制元数据与符号链接目标。报告只给出位置，不回显敏感值；修复暂存区中的问题后，也要将修正后的文件重新暂存。
 

@@ -569,7 +569,7 @@ test('legacy enforcement fields and blocked gags are ignored while stuck becomes
   board.stop()
 })
 
-test('fifteen workflows are available without a handoff table and keep switch provenance', async () => {
+test('seventeen workflows are available without a handoff table and keep switch provenance', async () => {
   const from = { workflow: 'runtime-forensics', stage: 'capture', at: 3000 }
   const raw = payload([
     session({ handoffFrom: from }),
@@ -587,14 +587,16 @@ test('fifteen workflows are available without a handoff table and keep switch pr
     session({ sessionId: 'eval', workflow: 'eval', stage: 'judge' }),
     session({ sessionId: 'create-verification-skill', workflow: 'create-verification-skill', stage: 'prove' }),
     session({ sessionId: 'maintain-verification-skill', workflow: 'maintain-verification-skill', stage: 'live' }),
+    session({ sessionId: 'create-formal-verification-skill', workflow: 'create-formal-verification-skill', stage: 'prove' }),
+    session({ sessionId: 'maintain-formal-verification-skill', workflow: 'maintain-formal-verification-skill', stage: 'judge' }),
     session({ sessionId: 'adr', workflow: 'adr', stage: 'decide' }),
   ])
   const mapped = mapBoard(raw)
   assert.deepEqual(mapped.workflows.filter(workflow => workflow.available).map(workflow => workflow.id).sort(), [
-    'blast-radius', 'bug-fix', 'create-verification-skill', 'eval', 'feature', 'hillclimb', 'interrogate', 'investigation',
-    'maintain-verification-skill', 'multi-phase-plan', 'perf-issue', 'prototype', 'refactoring', 'runtime-forensics', 'trace-forensics',
+    'blast-radius', 'bug-fix', 'create-formal-verification-skill', 'create-verification-skill', 'eval', 'feature', 'hillclimb', 'interrogate', 'investigation',
+    'maintain-formal-verification-skill', 'maintain-verification-skill', 'multi-phase-plan', 'perf-issue', 'prototype', 'refactoring', 'runtime-forensics', 'trace-forensics',
   ])
-  assert.equal(mapped.residents.length, 15)
+  assert.equal(mapped.residents.length, 17)
   assert.deepEqual(mapped.others.map(session => session.id), ['adr'])
   assert.deepEqual(mapped.residents[0].handoffFrom, from)
   assert.equal(mapped.residents[1].handoffFrom, null)
@@ -609,9 +611,9 @@ test('fifteen workflows are available without a handoff table and keep switch pr
   board.stop()
 })
 
-test('all fifteen workflows have complete stage art and plaque identities remain stable', () => {
+test('all seventeen workflows have complete stage art and plaque identities remain stable', () => {
   const mapped = mapBoard(payload())
-  assert.equal(Object.keys(ART).length, 15)
+  assert.equal(Object.keys(ART).length, 17)
   for (const workflow of workflows) {
     assert.deepEqual(Object.keys(ART[workflow.id].stages), workflow.stages.map(stage => stage.id))
     assert.ok(mapped.workflows.find(candidate => candidate.id === workflow.id).stages.every(stage => stage.skills.length > 0))
@@ -632,6 +634,8 @@ test('all fifteen workflows have complete stage art and plaque identities remain
     ['eval', 'eval', 'detective', ['frame', 'setup', 'prompt', 'run', 'judge', 'audit', 'synthesize']],
     ['create-verification-skill', '验证工具', 'detective', ['interview', 'generate', 'map', 'prove', 'handoff']],
     ['maintain-verification-skill', '验证巡检', 'detective', ['locate', 'index', 'source', 'reconcile', 'live', 'triage', 'ship']],
+    ['create-formal-verification-skill', '形式化验证', 'detective', ['target', 'tool', 'generate', 'prove', 'handoff']],
+    ['maintain-formal-verification-skill', '形式化巡检', 'detective', ['locate', 'baseline', 'changes', 'update', 'judge', 'sync', 'report']],
   ]) {
     const workflow = mapped.workflows.find(workflow => workflow.id === id)
     assert.equal(workflow.available, true)
@@ -657,7 +661,7 @@ test('all fifteen workflows have complete stage art and plaque identities remain
 })
 
 test('older hosts leave the new workflow plaques unavailable and do not invent residents', () => {
-  const ids = ['trace-forensics', 'blast-radius', 'refactoring', 'create-verification-skill', 'maintain-verification-skill']
+  const ids = ['trace-forensics', 'blast-radius', 'refactoring', 'create-verification-skill', 'maintain-verification-skill', 'create-formal-verification-skill', 'maintain-formal-verification-skill']
   const mapped = mapBoard({
     workflows: workflows.filter(workflow => !ids.includes(workflow.id)),
     sessions: [session(), ...ids.map(id => session({ sessionId: id, workflow: id, stage: 'report' }))],

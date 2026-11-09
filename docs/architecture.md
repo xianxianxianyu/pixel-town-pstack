@@ -8,7 +8,7 @@ Pixel Town is a DSH plugin with a skill provider, four reporting tools, a sessio
 
 | Area | Responsibility |
 | --- | --- |
-| `skills/pstack-*/` | Fifteen workflow skills plus the shared `pstack-opening-a-pr` delivery skill. |
+| `skills/pstack-*/` | Seventeen workflow skills plus shared `pstack-opening-a-pr` delivery and `pstack-statechart` tool skills. |
 | `src/shared/workflows.ts` | Workflow IDs, stages, skill names, reporting protocol, delivery skill, and historical ID mapping. |
 | `src/shared/fold.ts` | Pure folding of session records into progress, status, goals, delivery, and token usage. |
 | `src/shared/trail.ts` | Decision rows, evidence references, audit findings, transcript and TSV rendering. |
@@ -50,11 +50,17 @@ Accepted reports synchronize native DSH todos:
 
 The injected guidance asks agents to report before a stage's first action, report each re-entry, explain skips, and avoid a reply containing only a report. It also asks them not to duplicate playbook steps with `todo_write`. These are skill instructions, not enforced transitions or evidence gates. Diagnosis-to-fix handbacks and requested design checkpoints remain human decisions.
 
-`pstack-opening-a-pr` has no `metadata.workflow` and is not a sixteenth plaque. The implementation workflows load it at delivery; verification maintenance loads it only when corrections exist. The exit gate can open its unsent command draft. GitHub/GitLab delivery or local commits are performed by the agent following the skill, not by the renderer or reporting tools. Opening a PR/MR does not authorize merging or monitoring it.
+`pstack-opening-a-pr` has no `metadata.workflow` and is not a plaque. The implementation workflows load it at delivery; verification maintenance loads it only when corrections exist. The exit gate can open its unsent command draft. GitHub/GitLab delivery or local commits are performed by the agent following the skill, not by the renderer or reporting tools. Opening a PR/MR does not authorize merging or monitoring it.
 
 Project verification skills use `.dsh/skills/verify-<app>/SKILL.md`, a feature map, and any needed helpers. Creation must exercise the real launch → doctor → feature → evidence → cleanup path; maintenance repairs only that verification-skill directory and reports product regressions. Workflows marked `surface: true` recommend using an existing project verification skill, but do not gate execution on it.
 
 Every workflow protocol carries one drawing rule: when the `canvas-diagram` skill is available, write the diagram as a `.mmd` file, pass `canvas_check`, and deliver it with `present`; otherwise answer with a `mermaid` code block. `pstack-opening-a-pr` does not repeat it, because forge descriptions render `mermaid` blocks directly.
+
+`create-formal-verification-skill` and `maintain-formal-verification-skill` are workflows with their own plaques. Their project-local output is `<repo>/.dsh/skills/<name>/SKILL.md`; a check records the property, covered code, bounds, assumptions, command and last sync commit. Maintenance distinguishes stale descriptions from real code bugs, only updates verification artifacts, and does not advance a blocked check's sync commit.
+
+`pstack-statechart` is a shared tool skill with no workflow or plaque. On load, the provider derives the launcher, doctor and rendering-reference paths from the selected skill's absolute `locator` directory, so package relocation and configured `skillsRoot` both work. It appends shell-quoted `STATECHART_SCRIPT`, `STATECHART_DOCTOR` and `STATECHART_RENDER` assignments plus the **same** exported drawing-rule sentence used by stage protocols, not a second policy. The pipeline produces `chart.mmd` and `report.md`; charts go next to the workspace model before `canvas_check` / `present`, or are delivered as Mermaid text with the report when canvas is unavailable.
+
+The statechart runtime is byte-identical to pinned upstream pstack, excluding its tests and development configuration; the separate DSH doctor only looks up prerequisites. Node ≥22.18 is required (23.x needs ≥23.6), with existing Java/TLC via `mise` (Temurin 25 / TLC 1.7.4) or `TLA2TOOLS` and optional `JAVA`. The doctor runs before the pipeline. The unmodified upstream runner can provision missing managed tools, so the skill requires user consent before a run that would install them. No npm runtime dependencies are added. Upstream revision and SHA-256 inventory live in `THIRD_PARTY_NOTICES.md` and are checked by the integrity test.
 
 ## Event fold and session lifecycle
 
@@ -141,6 +147,8 @@ The API prefix is **`/api/pixel-town-pstack`**:
 
 The town polls the board every 1.5 seconds while visible, suspending polling when hidden. Errors show a disconnected indicator and retry UI. Static assets are read live from the linked package; rebuilding and restarting is necessary for host and bundled client changes.
 
+The provider's `list()` and `get()` read skill files on each call; it owns no watcher or body cache. DSH's registry caches discovery by working directory, scope chain, and registry revision, but always calls the winning provider's `get()` for the body. A cached old catalog can temporarily survive a disk update; a cache miss or invalidation re-reads new workflow metadata, and an old host rejects unknown IDs. DSH catches that provider error, omits the entire town catalog, and marks discovery incomplete. Therefore a live linked update adding workflows must stop DSH first, update source/skills, rebuild `lib/` while stopped, and restart only after success. Restarting with old `lib/` does not fix it. Board launch gating is independently safe but cannot make the incompatible skill catalog safe.
+
 Embedded navigation uses same-origin messages under the `pixel-town-pstack/` namespace. The client checks the exact iframe window, origin, and message shape before acting:
 
 - `open-session`: call public `ctx.uiWorkspace.openSession(sessionId)`.
@@ -156,7 +164,7 @@ Standalone plaques show copyable commands. An embedded parent that does not answ
 
 The world is a fixed **472 × 360 art-pixel** stage. Background, glow, and sprite canvases, SVG overlay, and hit targets share one CSS transform; resizing changes that transform rather than repainting the static art. Scaling fits the entire world, uses device-pixel-aligned sizing when close enough to the fit, and simplifies nameplates when text becomes too small. Popovers remain full-size HTML.
 
-A 32-color palette defines three work buildings and a park around the central fountain. The art catalog places five plaques in each building. Residents move to their current plaque, to a building save point when saved or waiting, or out through the delivery exit when finished. Interrupted residents remain greyed at their own plaque. Existing residents load in place, and reloading does not replay arrivals or departures.
+A 32-color palette defines three work buildings and a park around the central fountain. There are seventeen plaques: five in construction, seven in the detective agency (three back-row and four front-row stations), and five in the clinic. Residents move to their current plaque, to a building save point when saved or waiting, or out through the delivery exit when finished. Interrupted residents remain greyed at their own plaque. Existing residents load in place, and reloading does not replay arrivals or departures. Static plaques may outlive an in-memory host version: a plaque only offers launch controls when the host payload advertises its workflow and skill. Otherwise clicking shows an explicit not-connected hint and sends no start request.
 
 One animation loop is capped at 12 fps and paused while hidden. Local time controls day, dusk, and night lighting; a prepainted light map keeps work areas and controls visible at night. Quiet mode and system reduced motion stop ambient movement and make journeys instant.
 

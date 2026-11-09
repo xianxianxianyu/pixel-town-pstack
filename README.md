@@ -35,11 +35,13 @@ dsh plugin --profile <profile> add link:"$(pwd)"
 
 Restart DSH, then open **Pixel Town / 像素小镇** in the left sidebar. The panel uses DSH's existing authentication on the same origin; it needs no separate token URL. Keep the linked checkout in place. After updating it, install dependencies and rebuild, then restart DSH to refresh the host, tools, skill catalog, and client bridge.
 
+For this formal-skills update, **quit DSH before updating a live linked checkout**, rebuild that checkout's `lib/`, then restart only after the build succeeds. An old host reads new skill files on catalog cache misses and cannot parse the new workflow IDs; merely updating files or restarting without rebuilding can hide the town's entire skill catalog. The board's unavailable-plaque hint protects clicks, not this skill-provider compatibility boundary.
+
 ## Choose a playbook
 
 Click a plaque, select a workspace, and choose **新开会话** (new session). DSH opens a new or blank conversation and inserts an **unsent** slash-command draft; add your task and send it yourself. An existing draft is preserved. You can also paste any command below directly into a DSH conversation.
 
-All **15 plaques** are runnable. Buildings are categories, not sequential workflow stages; the park is a quiet corner, not a sixteenth workflow.
+All **17 plaques** are runnable after restarting the updated host. The detective agency has seven plaques in a **3+4** layout; the other two buildings have five each. Buildings are categories, not sequential workflow stages; the park is a quiet corner, not another workflow. An older host shows the new plaques but explains that they are not connected, without offering to start an unavailable workflow.
 
 | Building | Plaque | Command | Use it for |
 | --- | --- | --- | --- |
@@ -53,6 +55,8 @@ All **15 plaques** are runnable. Buildings are categories, not sequential workfl
 | 侦探社 · Detective agency | eval | `/pstack-eval` | Compare controlled candidates, judge anonymous outputs, and audit actual artifacts. |
 | 侦探社 · Detective agency | 验证工具 | `/pstack-create-verification-skill` | Create and exercise a project-specific real-app verification skill. |
 | 侦探社 · Detective agency | 验证巡检 | `/pstack-maintain-verification-skill` | Check every mapped feature and repair the verification skill, not product code. |
+| 侦探社 · Detective agency | 形式化验证 | `/pstack-create-formal-verification-skill` | Verify a high-impact property beyond ordinary tests and generate a rerunnable project skill. |
+| 侦探社 · Detective agency | 形式化巡检 | `/pstack-maintain-formal-verification-skill` | Resync formal checks with changed code and distinguish model drift from real bugs. |
 | 灭虫急诊站 · Bug clinic | 现场取证 | `/pstack-runtime-forensics` | Diagnose a running incident, then ask whether to fix it. |
 | 灭虫急诊站 · Bug clinic | 分析抓包 | `/pstack-trace-forensics` | Analyze an existing profile, trace, heap snapshot, or log without changing code. |
 | 灭虫急诊站 · Bug clinic | 修 bug | `/pstack-bug-fix` | Reproduce a bug, fix its cause, and verify the original surface. |
@@ -64,6 +68,14 @@ All **15 plaques** are runnable. Buildings are categories, not sequential workfl
 The **开 PR / MR** exit uses **`/pstack-opening-a-pr`**, a shared delivery skill, not another plaque. Implementation workflows load it at delivery; the exit can also open an unsent draft for an existing change. It guides ordered commits and a ready GitHub PR or GitLab MR when the remote, CLI, and user's workflow permit, otherwise honest local delivery. It does not merge or babysit the result.
 
 The town and its host tools do **not autonomously commit, push, or open PRs/MRs**. An agent following the selected skills can run repository commands, including delivery actions under `pstack-opening-a-pr`; choosing a plaque is not a background Git automation service.
+
+### Formal checks and statecharts
+
+Formal workflows create or maintain `<repo>/.dsh/skills/<name>/SKILL.md`, including covered code, bounds, assumptions, and the last sync commit. They require a failing negative control and leave product bugs as findings rather than weakening the property.
+
+**`/pstack-statechart`** is a shared tool skill, not a plaque. It checks a TLA+ model and explains rules and shortest counterexample paths with `chart.mmd` and `report.md`. The skill provider injects the installed scripts' absolute paths, including a one-line read-only doctor command; no machine-specific path belongs in generated project skills. When `canvas-diagram` is available, copy the chart next to the workspace model, check it with `canvas_check`, and deliver it with `present`. Otherwise return a Mermaid block and the report.
+
+Statechart needs **Node ≥22.18** (Node 23 requires ≥23.6 for native TypeScript) and **Java/TLC**. Use existing `mise`-managed Temurin 25 and TLC 1.7.4, or set `TLA2TOOLS` to the jar and `JAVA` to the Java executable (`java` on `PATH` is the fallback). Run the injected doctor before the pipeline. If managed tools are missing, the upstream runner can fetch them through `mise`: **ask the user before that first run; do not auto-install without agreement**. The vendored runtime has no npm runtime dependencies; tests and `fast-check` are not shipped. Attribution, pinned source revision, and runtime checksums are in [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Read and control a session
 
@@ -135,6 +147,8 @@ pnpm test
 pnpm typecheck
 node scripts/check-public.mjs
 ```
+
+The formal-plaque behavior test opens the real board in headless Chrome/Chromium with a temporary profile and an ephemeral loopback server, not DSH. Install a browser separately or set `CHROME_BIN` to an existing executable; tests do not install it. To prove an old host explicitly, set `OLD_TOWN_WORKFLOWS` to a frozen pre-port `lib/workflows.js` when running `node --test test/formal-board.test.mjs`.
 
 The privacy check scans Git-listed files in both the working tree and the staged index, including binary metadata and symlink targets. It reports locations without echoing sensitive values; fixing a staged finding also requires staging the correction.
 

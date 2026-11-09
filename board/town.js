@@ -27,16 +27,16 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
   };
   const PARK = { x: MARGIN, y: BAND.bottom, w: ROOM.w, h: ROOM.h, gate: WEST };
   const north = (room) => room.y < CENTER.y;
-  // Every building has five stations: three on the back row, two in front either side of its door.
-  // Each station is a 39 px bay: plaque on top, prop and residents on its floor line.
+  // The study has seven stations (three behind four); the other buildings keep five.
+  // Each station is a 39 px-high bay: plaque on top, prop and residents on its floor line.
   const BACK_ROW = [[6, 23, 53, 39], [61, 23, 53, 39], [116, 23, 53, 39]];
   const STATION_LAYOUT = {
     construction: [...BACK_ROW, [6, 65, 108, 39], [116, 65, 53, 39]],
-    detective: [...BACK_ROW, [6, 65, 80, 39], [89, 65, 80, 39]],
+    detective: [...BACK_ROW, [6, 65, 38, 39], [47, 65, 39, 39], [89, 65, 39, 39], [131, 65, 38, 39]],
     clinic: [[6, 23, 80, 39], [89, 23, 80, 39], [6, 65, 80, 39], [89, 65, 39, 39], [131, 65, 38, 39]],
   };
   // The study lays a coloured rug under each station.
-  const RUGS = { interrogate: ['P', 'p'], 'blast-radius': ['B', 'u'], eval: ['Y', 'j'], 'create-verification-skill': ['M', 'm'], 'maintain-verification-skill': ['R', 'r'] };
+  const RUGS = { interrogate: ['P', 'p'], 'blast-radius': ['B', 'u'], eval: ['Y', 'j'], 'create-verification-skill': ['M', 'm'], 'maintain-verification-skill': ['R', 'r'], 'create-formal-verification-skill': ['B', 'i'], 'maintain-formal-verification-skill': ['P', 'm'] };
   const stations = new Map();
   for (const [building, room] of Object.entries(rooms)) {
     const plaques = Object.values(PLAQUES).filter((plaque) => plaque.building === building);
@@ -843,7 +843,7 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     <p>小镇固定为 472 × 360 像素，缩放和调整窗口时会完整放进木框，不会裁切。小窗口下名牌只显示编号和状态；点击后仍可在原字号面板中查看完整信息。</p>
     <ul class="help-list">
       <li>点木牌，了解它适合做什么、查看居民。主机提供对应工作流时，可以选工作区、新开会话并填好命令，补上任务描述后再发送；旧主机未接入的木牌会明确提示。</li>
-      <li>工地有分析需求、出原型、分期计划、实现功能、重构；侦探社有代码审查、爆炸半径、eval、验证工具、验证巡检；灭虫急诊站有现场取证、分析抓包、修 bug、性能问题、持续调优。居民站在对应木牌旁；未匹配的工作流列在告示牌的「其他会话」。</li>
+      <li>工地有分析需求、出原型、分期计划、实现功能、重构；侦探社后排是代码审查、爆炸半径、eval，前排是验证工具、验证巡检、形式化验证、形式化巡检；灭虫急诊站有现场取证、分析抓包、修 bug、性能问题、持续调优。居民站在对应木牌旁；未匹配的工作流列在告示牌的「其他会话」。形式化验证建立可重跑的性质检查，形式化巡检让检查跟上代码变化；共享的状态图工具没有单独木牌。</li>
       <li>小镇是一条流水线：新会话的小人从左边的「入镇」石沿大路走进来，到自己的木牌前干活；完工后从右边出镇。开了 PR（GitHub）或 MR（GitLab）、或只留了本地提交的小人带着信封，在右口的「开 PR / MR」关口停一下再走；只读的任务直接离开。打开页面时不会重放：已在镇上的直接就位，已完工的只出现在「最近离开」里。</li>
       <li>点「开 PR / MR」关口也能开工：选工作区、新开会话并填好 /pstack-opening-a-pr，补一句要整理和交付的改动（分支或路径）再发送；它把改动整理成提交并开 PR / MR。旧主机没有提供这项时只给出可复制的命令。</li>
       <li>想让一个会话自己跑到目标达成，在 DSH 输入框里用 <code>/goal &lt;目标&gt;</code>：DSH 会一轮轮接着做，直到目标完成、受阻或用完轮次；小镇只负责显示，不替你开始或停止。目标进行中的小人右肩挂一面小红旗（目标），记着工作日志的挂一本账本（记录中）；两枚徽章静止地排在头侧状态图标下方。居民卡的「自主运行」写着目标、进行中 / 已暂停 / 受阻 / 已完成、第几轮 / 共几轮和受阻原因。</li>
