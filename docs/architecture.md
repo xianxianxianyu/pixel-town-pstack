@@ -32,7 +32,7 @@ DSH committed session records ← successful tool calls/results
 town → same-origin client bridge → DSH workspace/session UI → unsent draft
 ```
 
-`scripts/build.mjs` uses esbuild to produce host/shared ESM modules and a client bundle. The browser bundle is registered through DSH's module loader; DSH supplies React, so the build does not embed another React instance. The host bundles `yaml` for skill front matter and leaves DSH packages external. Required upstream notices are in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+`scripts/build.mjs` uses esbuild to produce host/shared ESM modules and a client bundle. The browser bundle is registered through DSH's module loader; DSH supplies React, so the build does not embed another React instance. The host bundles `yaml` for skill front matter and leaves DSH packages external. The client bundles a pinned copy of DSH's `@deepseek-ai/dsh-util-workspace-path`, the file-address helper DSH's own client bundles also inline instead of sharing through the module table. Required upstream notices are in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
 ## Skills and progress reporting
 
@@ -54,6 +54,8 @@ The injected guidance asks agents to report before a stage's first action, repor
 
 Project verification skills use `.dsh/skills/verify-<app>/SKILL.md`, a feature map, and any needed helpers. Creation must exercise the real launch → doctor → feature → evidence → cleanup path; maintenance repairs only that verification-skill directory and reports product regressions. Workflows marked `surface: true` recommend using an existing project verification skill, but do not gate execution on it.
 
+Every workflow protocol carries one drawing rule: when the `canvas-diagram` skill is available, write the diagram as a `.mmd` file, pass `canvas_check`, and deliver it with `present`; otherwise answer with a `mermaid` code block. `pstack-opening-a-pr` does not repeat it, because forge descriptions render `mermaid` blocks directly.
+
 ## Event fold and session lifecycle
 
 The live adapter prepends the native session header to `snapshotEvents()` and passes the result to the shared fold. **`snapshotEvents()` is deprecated in DSH.** This integration is tied to the tested host contracts and needs review when DSH changes them. The board enumerates sessions mounted in the **current DSH process**, not all persisted sessions.
@@ -67,6 +69,8 @@ The fold tracks committed tools, stage history, skipped stages, rollback, handof
 - `finishedAt` records the transition to finished, not the last stage report, and clears when work resumes.
 
 Delivery is derived from successful committed shell results in delivery-capable stages: recognized GitHub/GitLab creation commands or URLs produce `pr`/`mr`; successful local commits produce `local`. Failed results and nonzero exit markers do not count. A later local commit does not erase a known PR/MR URL. No matching evidence means `delivery: null`; a report alone is not delivery proof.
+
+The latest chart, `canvas: { path, at }`, is the `path` argument of the last committed `canvas_check` call whose result is `isError: false`. dsh-canvas defines that result as "the file passed validation". Failed and pending checks do not count, the path is kept as the agent wrote it (relative or absolute), and a fork boundary resets it as it resets delivery. A subagent's checks stay with the subagent's session.
 
 Native `goal/change` version-1 snapshots and clears feed the goal display. Only admitted goal-sourced user messages advance rounds; ordinary user messages do not. Unknown versions are ignored. The town renders the objective, phase, rounds, and blocker, but DSH owns goal execution.
 
@@ -140,6 +144,7 @@ The town polls the board every 1.5 seconds while visible, suspending polling whe
 Embedded navigation uses same-origin messages under the `pixel-town-pstack/` namespace. The client checks the exact iframe window, origin, and message shape before acting:
 
 - `open-session`: call public `ctx.uiWorkspace.openSession(sessionId)`.
+- `open-file`: `{ sessionId, path }`, both non-empty strings. Call `ctx.uiWorkspace.openSession(sessionId)` and wait up to 2 seconds for `ctx.sidebarRight.mounted` to report that session. That report precedes the render that creates the session's sidebar store, so the client then waits one task and checks the session is still on screen. It then calls `ctx.sidebarRight.openResource(fileAddressFor(sessionId, cwd, path), { revealIfOpened: true })`, with `cwd` from the public sessions list, which is the same address DSH's own file links use. A timeout or a thrown error shows the open-failure alert. The pending open belongs to the plugin, not the town page, which unmounts when the conversation takes the main column. The resident card offers this as **最新图表** only when embedded and only when the host reports a chart; older hosts report none.
 - `workspaces`: reply with `{ items: [{ id, title, path }] }` and push public workspace-list subscription updates; unsubscribe on unmount.
 - `start-session`: allow only manifest skills plus `DELIVERY_SKILL`, validate a selected workspace against the current snapshot, then call `ctx.uiWorkspace.startSession(workspaceId, { prompt: '/' + skill + ' ', whenDraftExists: 'append' })`.
 

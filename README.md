@@ -71,6 +71,7 @@ The town and its host tools do **not autonomously commit, push, or open PRs/MRs*
 
 - A resident's station and card show its reported stage, skipped or revisited stages, handoffs, child agents, and token usage. Token totals include repeated context reads; they are not unique text or a monetary estimate.
 - The **目标** flag displays a native DSH goal started with `/goal <objective>`. DSH owns autonomous goal execution; the town only displays it.
+- **最新图表** (latest chart) appears on a resident card once the session's agent has checked a diagram with the `dsh-canvas` plugin's `canvas_check`. It opens the conversation with that file in DSH's right sidebar; without dsh-canvas installed the file opens as plain text. Every workflow tells the agent to draw with the `canvas-diagram` skill when it is available and otherwise to answer with a `mermaid` code block.
 - The **记录中** notebook badge marks an enabled decision trail. Save, pause, and lightning badges distinguish a checkpoint from an interrupted turn.
 - The central **收件箱** (inbox) collects questions and approvals, saved sessions waiting for you, and interruptions. **去回答 / 去看看** opens the conversation; the town never answers, approves, resumes, or submits on your behalf.
 - The notice board provides overview, settings, model roles, residents, and **最近离开** (recent departures). Completed sessions leave the map; recorded PR/MR/local delivery is shown at the exit. Quiet mode and system reduced motion stop ambient animation.
