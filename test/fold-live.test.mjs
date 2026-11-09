@@ -771,11 +771,23 @@ test('legacy check fields are ignored while arbitrary paths and workflow switche
 })
 
 for (const [name, command, output, kind, url] of [
-  ['GitHub URL', 'cat delivery.txt', 'https://github.example/acme/widget/pull/17', 'pr', 'https://github.example/acme/widget/pull/17'],
-  ['GitLab URL', 'cat delivery.txt', 'https://gitlab.example/acme/group/widget/-/merge_requests/23', 'mr', 'https://gitlab.example/acme/group/widget/-/merge_requests/23'],
+  ['GitHub URL', 'gh pr create --base main', 'https://github.example/acme/widget/pull/17', 'pr', 'https://github.example/acme/widget/pull/17'],
+  ['GitLab URL', 'glab mr create --target-branch main', 'https://gitlab.example/acme/group/widget/-/merge_requests/23', 'mr', 'https://gitlab.example/acme/group/widget/-/merge_requests/23'],
   ['GitHub command', 'gh pr create --base main', 'created', 'pr', undefined],
   ['GitLab command', 'glab mr create --target-branch main', 'created', 'mr', undefined],
   ['local commit', 'git -C "/tmp/work tree" commit -m "fix(cli): carry seconds"', '[fix-cli abc1234] fix(cli): carry seconds', 'local', undefined],
+  ['commit with hooks bypassed', 'git commit -n -m x', 'committed', 'local', undefined],
+  ['commit in an AND chain', 'git add . && git commit -m x && git status', 'committed', 'local', undefined],
+  ['commit in an OR chain', 'git diff --quiet || git commit -am x', 'committed', 'local', undefined],
+  ['commit before a pipe', 'git commit -m x | cat', 'committed', 'local', undefined],
+  ['commit after a semicolon', 'git add .; git -C repo commit -m x', 'committed', 'local', undefined],
+  ['commit after a newline', 'git add .\ngit commit -m x', 'committed', 'local', undefined],
+  ['assignment and command prefix', 'GH_PROMPT_DISABLED=1 command gh pr create', 'created', 'pr', undefined],
+  ['env prefix and quoted assignment', 'env TITLE="a; b && c" glab mr create', 'created', 'mr', undefined],
+  ['nested prefixes', 'LC_ALL=C command env GIT_EDITOR=true git -C repo commit -m x', 'committed', 'local', undefined],
+  ['quoted command words', '"gh" p\'r\' create --title "a; b && c"', 'created', 'pr', undefined],
+  ['escaped command words', 'g\\h pr cre\\ate', 'created', 'pr', undefined],
+  ['continued command line', 'git \\\ncommit -m x', 'committed', 'local', undefined],
 ]) {
   test(`delivery recognizes committed successful ${name}`, () => {
     const l = log()
@@ -787,6 +799,40 @@ for (const [name, command, output, kind, url] of [
     assert.deepEqual(l.events.reduce(reduce, undefined).board, foldSession(l.events))
   })
 }
+
+for (const [name, command, output] of [
+  ['J4 echo of a forge command', 'echo "gh pr create --base main"', 'gh pr create --base main'],
+  ['J4 URL read from notes', 'cat notes.md', 'https://github.com/acme/widget/pull/17'],
+  ['J4 dry-run commit', 'git commit --dry-run', 'no changes added to commit'],
+  ['echoed URL', 'echo https://github.com/acme/widget/pull/17', 'https://github.com/acme/widget/pull/17'],
+  ['single-quoted separators', "echo 'example; gh pr create && glab mr create'", 'example'],
+  ['double-quoted separators', 'echo "example | git commit -m x\\n; gh pr create"', 'example'],
+  ['escaped quotes', 'echo "example \\"; gh pr create"', 'example'],
+  ['escaped separator', 'echo example\\; gh pr create', 'example'],
+  ['commented command', 'echo example # ; gh pr create', 'example'],
+  ['command argument', 'printf "%s" gh pr create', 'gh pr create'],
+  ['prefixed dry run', 'env FOO=bar command git -C repo commit --dry-run', 'would commit'],
+  ['GitHub view', 'gh pr view --json url', 'https://github.com/acme/widget/pull/17'],
+  ['GitLab view', 'glab mr view', 'https://gitlab.com/acme/widget/-/merge_requests/23'],
+  ['command lookup', 'command -v gh pr create', 'gh'],
+]) {
+  test(`delivery rejects ${name}`, () => {
+    const l = log()
+    l.stage('pr')
+    l.call('delivery', 'bash', { command })
+    l.result('delivery', false, output)
+    assert.equal(foldSession(l.events).delivery, null)
+    assert.deepEqual(l.events.reduce(reduce, undefined).board, foldSession(l.events))
+  })
+}
+
+test('delivery does not take a URL from local commit output', () => {
+  const l = log()
+  l.stage('pr')
+  l.call('commit', 'bash', { command: 'git commit -m "See https://github.com/acme/widget/pull/17"' })
+  const result = l.result('commit', false, '[main abc1234] See https://github.com/acme/widget/pull/17')
+  assert.deepEqual(foldSession(l.events).delivery, { kind: 'local', at: result.time })
+})
 
 test('delivery ignores failed, uncommitted, unmatched and pre-delivery commands', () => {
   const l = log()

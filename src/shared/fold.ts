@@ -277,6 +277,50 @@ function inferTodo(todos: readonly Todo[], workflow?: string): string | undefine
   return best
 }
 
+function* simpleCommands(command: string): Generator<string[]> {
+  let words: string[] = [], word: string | undefined, quote = ''
+  for (let index = 0; index < command.length; index++) {
+    const char = command[index]!
+    if (char === '\\' && quote !== "'") {
+      const next = command[++index]
+      if (next === undefined) return
+      if (next === '\n') continue
+      if (quote === '"' && !'$`"\\'.includes(next)) word = (word ?? '') + '\\'
+      word = (word ?? '') + next
+    } else if (quote) {
+      if (char === quote) quote = ''
+      else word = (word ?? '') + char
+    } else if (char === "'" || char === '"') {
+      quote = char
+      word ??= ''
+    } else if (char === '#' && word === undefined) {
+      const newline = command.indexOf('\n', index)
+      index = newline === -1 ? command.length : newline - 1
+    } else if (char === ';' || char === '\n' || char === '|' || (char === '&' && command[index + 1] === '&')) {
+      if (word !== undefined) words.push(word)
+      if (words.length) yield words
+      words = []
+      word = undefined
+      if ((char === '&' || char === '|') && command[index + 1] === char) index++
+    } else if (/\s/u.test(char)) {
+      if (word !== undefined) words.push(word)
+      word = undefined
+    } else {
+      word = (word ?? '') + char
+    }
+  }
+  if (quote) return
+  if (word !== undefined) words.push(word)
+  if (words.length) yield words
+}
+
+/**
+ * Delivery needs a successful shell result after reaching pr/ship and a create
+ * or commit command at command position, never text merely mentioning one.
+ * Split simple commands on ;, &&, ||, | and newlines, honoring quotes/escapes;
+ * skip assignments and command/env prefixes. Only forge create results supply
+ * URLs (view is not creation). Git --dry-run is not delivery; -n bypasses hooks.
+ */
 function deliveryResult(board: BoardSession, command: string, output: string, at: number): BoardSession['delivery'] {
   if (board.workflow === undefined || /\[exit code: [1-9]\d*\]\s*$/u.test(output)) return board.delivery
   const workflow = getWorkflow(board.workflow)
@@ -285,15 +329,30 @@ function deliveryResult(board: BoardSession, command: string, output: string, at
     entry.workflow === board.workflow && (entry.stage === 'pr' || entry.stage === 'ship')
     && entry.kind !== 'rejected' && entry.kind !== 'skip')
   if (!inDelivery) return board.delivery
-  let url: string | undefined
-  for (const match of output.matchAll(/https:\/\/[^\s<>"'`]+\/(?:pull\/\d+|-\/merge_requests\/\d+)/gu)) url = match[0]
-  if (url !== undefined) return { kind: url.includes('/-/merge_requests/') ? 'mr' : 'pr', url, at }
+  let kind: NonNullable<BoardSession['delivery']>['kind'] | undefined
+  for (const words of simpleCommands(command)) {
+    let index = 0
+    while (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(words[index] ?? '') || words[index] === 'command' || words[index] === 'env') {
+      const prefix = words[index++]
+      if (prefix === 'command' && words[index] === '-p') index++
+      if (prefix === 'env' && (words[index] === '-i' || words[index] === '--ignore-environment')) index++
+      if (words[index] === '--') index++
+    }
+    if (words[index] === 'gh' && words[index + 1] === 'pr' && words[index + 2] === 'create') kind = 'pr'
+    else if (words[index] === 'glab' && words[index + 1] === 'mr' && words[index + 2] === 'create') kind = 'mr'
+    else if (words[index] === 'git') {
+      index += words[index + 1] === '-C' ? 3 : 1
+      if (words[index] === 'commit' && !words.includes('--dry-run', index + 1)) kind ??= 'local'
+    }
+  }
+  if (kind === undefined) return board.delivery
+  if (kind !== 'local') {
+    let url: string | undefined
+    for (const match of output.matchAll(/https:\/\/[^\s<>"'`]+\/(?:pull\/\d+|-\/merge_requests\/\d+)/gu)) url = match[0]
+    if (url !== undefined) return { kind: url.includes('/-/merge_requests/') ? 'mr' : 'pr', url, at }
+  }
   // A later local commit or URL-less CLI response must not erase a known link.
-  if (board.delivery?.url !== undefined) return board.delivery
-  if (/\bgh\s+pr\s+create\b/u.test(command)) return { kind: 'pr', at }
-  if (/\bglab\s+mr\s+create\b/u.test(command)) return { kind: 'mr', at }
-  if (/(?:^|[;&|\n])\s*git\s+(?:-C\s+(?:"[^"]*"|'[^']*'|\S+)\s+)?commit\b/u.test(command)) return { kind: 'local', at }
-  return board.delivery
+  return board.delivery?.url !== undefined ? board.delivery : { kind, at }
 }
 
 /** Pure incremental reducer; pass undefined for the first record. */
