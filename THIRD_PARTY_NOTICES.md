@@ -40,7 +40,8 @@ SOFTWARE.
 - Upstream: <https://github.com/deepseek-ai/deepseek-harness>
 - Author: DeepSeek.
 - License source: upstream root `LICENSE`, reproduced verbatim below.
-- Derived integration material: `src/host/dsh.ts` and `src/client/dsh.ts` describe the DSH interfaces used by this plugin; `src/shared/fold.ts` adapts native session/goal event behavior, including the goal snapshot and admitted-round rules; `src/client/index.tsx` adapts public workspace/session navigation and default-workspace display conventions. Associated integration and event-fold tests exercise these DSH contracts. The host registration in `src/host/index.ts` and the integration descriptions in `docs/architecture.md` rely on these upstream contracts. This is an adapter, not a vendored copy of the DSH runtime.
+- Derived integration material: `src/host/dsh.ts` and `src/client/dsh.ts` describe the DSH interfaces used by this plugin; `src/shared/fold.ts` adapts native session/goal event behavior, including the goal snapshot and admitted-round rules; `src/client/index.tsx` adapts public workspace/session navigation, Sidebar file opening, and default-workspace display conventions. Associated integration and event-fold tests exercise these DSH contracts. The host registration in `src/host/index.ts` and the integration descriptions in `docs/architecture.md` rely on these upstream contracts. This is an adapter, not a vendored copy of the DSH runtime.
+- Bundled use: `@deepseek-ai/dsh-util-workspace-path` (locked `0.2.2-rc.1` in `pnpm-lock.yaml`, MIT, DeepSeek) builds Sidebar file addresses; esbuild includes its file-address helpers in the generated `lib/client.js`. The package's `LICENSE` is the DSH license reproduced below.
 
 ```text
 MIT License
@@ -92,6 +93,6 @@ THIS SOFTWARE.
 
 ## Build and host dependency boundary
 
-`scripts/build.mjs` bundles the plugin's own source and the YAML parser described above. React and its JSX runtime are external browser modules supplied by DSH; DSH packages remain external in the host build. esbuild, TypeScript, Node/React type declarations, and their development dependencies are build tools, not code embedded into the plugin's runtime bundles. Their packages retain their own license files when installed. If a future change bundles another dependency, its applicable notice must accompany the resulting distribution.
+`scripts/build.mjs` bundles the plugin's own source, the YAML parser described above, and DSH's workspace-path helper into the client. React and its JSX runtime are external browser modules supplied by DSH; DSH packages remain external in the host build. esbuild, TypeScript, Node/React type declarations, and their development dependencies are build tools, not code embedded into the plugin's runtime bundles. Their packages retain their own license files when installed. If a future change bundles another dependency, its applicable notice must accompany the resulting distribution.
 
 The full, unmodified AGPL version-3 text in [LICENSE](LICENSE) is from <https://www.gnu.org/licenses/agpl-3.0.txt>, headed “Version 3, 19 November 2007”; the project's grant permits version 3 **or any later version**.

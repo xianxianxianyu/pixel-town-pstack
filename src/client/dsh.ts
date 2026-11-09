@@ -43,5 +43,19 @@ export interface ClientContext {
     openSession(sessionId: string): void
     startSession(workspaceId?: string, options?: StartSessionOptions): void
   }
+  /** Public Session Controller list; a file address is relative to the Session's workspace root. */
+  readonly sessions: {
+    readonly list: {
+      getSnapshot(): { readonly byId: Readonly<Record<string, { readonly cwd?: string } | undefined>> }
+    }
+  }
+  /** Public ui-sidebar-right face: the Session on screen and resource navigation within it. */
+  readonly sidebarRight: {
+    readonly mounted: {
+      getSnapshot(): string | undefined
+      subscribe(listener: () => void): () => void
+    }
+    openResource(address: string, options?: { readonly revealIfOpened?: boolean }): void
+  }
   effect(install: () => (() => void) | void, label?: string): () => void
 }

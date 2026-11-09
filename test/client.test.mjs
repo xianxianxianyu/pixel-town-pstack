@@ -163,7 +163,11 @@ async function mountPublishedClient(t, { defaultTitle = 'Default workspace' } = 
   let loaded
   let failure
   window.__ModuleLoader__ = { load: module => { loaded = module } }
-  runInNewContext(bundle, { window, console: { ...console, error: (...args) => errors.push(args) }, URLSearchParams })
+  // Late-bound timers, so a test's mock.timers governs the bundle as well.
+  runInNewContext(bundle, {
+    window, console: { ...console, error: (...args) => errors.push(args) }, URLSearchParams,
+    setTimeout: (...args) => setTimeout(...args), clearTimeout: (...args) => clearTimeout(...args),
+  })
   assert.equal(loaded.id, metadata.name)
   const client = loaded.factory(id => {
     assert.ok(['react', 'react/jsx-runtime'].includes(id), `unexpected runtime dependency: ${id}`)
@@ -175,13 +179,16 @@ async function mountPublishedClient(t, { defaultTitle = 'Default workspace' } = 
     }
     return require(id)
   })
-  assert.deepEqual(Array.from(client.inject), ['slots', 'locale', 'uiWorkspace', 'workspaces'])
+  assert.deepEqual(Array.from(client.inject), ['slots', 'locale', 'uiWorkspace', 'workspaces', 'sessions', 'sidebarRight'])
   const registrations = []
   const dictionaries = []
   const opened = []
   const started = []
+  const resources = []
   const listeners = new Set()
+  const screenListeners = new Set()
   let unsubscribed = 0
+  let screen
   let snapshot = { items: [{ workspaceId: 'workspace-project', title: 'Project', path: '/projects/project' }] }
   const ctx = {
     effect: install => install(),
@@ -215,6 +222,25 @@ async function mountPublishedClient(t, { defaultTitle = 'Default workspace' } = 
         started.push([workspaceId, structuredClone(options)])
       },
     },
+    sessions: {
+      list: {
+        getSnapshot() {
+          assert.equal(this, ctx.sessions.list)
+          return { byId: { 'session-example': { cwd: '/projects/project' }, 'session-unknown-cwd': {} } }
+        },
+      },
+    },
+    sidebarRight: {
+      mounted: {
+        getSnapshot() { assert.equal(this, ctx.sidebarRight.mounted); return screen },
+        subscribe(listener) {
+          assert.equal(this, ctx.sidebarRight.mounted)
+          screenListeners.add(listener)
+          return () => { screenListeners.delete(listener) }
+        },
+      },
+      openResource(address, options) { assert.equal(this, ctx.sidebarRight); resources.push([address, structuredClone(options)]) },
+    },
   }
   client.apply(ctx)
   const main = registrations.find(entry => entry.options.name === 'main')
@@ -229,11 +255,17 @@ async function mountPublishedClient(t, { defaultTitle = 'Default workspace' } = 
     window.dispatchEvent(Object.assign(new Event('message'), { data, source, origin: messageOrigin }))
   return {
     metadata, main, registrations, dictionaries, ctx, page, render, frame, frameRef, send,
-    sent, opened, started, errors, listeners, unmount,
+    sent, opened, started, resources, errors, listeners, screenListeners, unmount,
     get unsubscribed() { return unsubscribed },
+    get failure() { return failure },
     updateWorkspaces(items, notify = true) {
       snapshot = { items }
       if (notify) for (const listener of listeners) listener()
+    },
+    // The Sidebar names the Session on screen and notifies synchronously, as DSH's snapshot store does.
+    showSession(sessionId) {
+      screen = sessionId
+      for (const listener of [...screenListeners]) listener()
     },
   }
 }
@@ -385,4 +417,108 @@ test('published client logs start failures, displays its dedicated localized ale
   send(data)
   assert.equal(render().props.children.some(child => child?.props?.role === 'alert'), false)
   assert.equal(runtime.started.length, 1)
+})
+
+const settle = () => new Promise(resolve => { setImmediate(resolve) })
+// One task after the Sidebar names the Session: the render that mints its store has run.
+async function nextTask(t) {
+  await settle()
+  t.mock.timers.tick(0)
+  await settle()
+}
+
+test('published client opens a checked file beside its session only after the Sidebar names it, even once the town unmounts', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const runtime = await mountPublishedClient(t)
+  const { send, frame, opened, resources, screenListeners } = runtime
+  send(fileRequest, {}, origin)
+  send(fileRequest, frame, 'https://other.example')
+  send({ ...fileRequest, extra: true })
+  assert.deepEqual(opened, [])
+  assert.equal(screenListeners.size, 0)
+  send({ ...fileRequest, path: '/projects/project/docs/flow.mmd' })
+  assert.deepEqual(opened, ['session-example'], 'the conversation opens first')
+  // ui-workspace swaps the town out of the main column; the pending open belongs to the plugin, not the page.
+  runtime.unmount()
+  runtime.showSession('session-other')
+  await nextTask(t)
+  assert.deepEqual(resources, [], 'another Session on screen is not the target')
+  runtime.showSession('session-example')
+  assert.equal(screenListeners.size, 0)
+  await settle()
+  assert.deepEqual(resources, [], 'the open waits for the task after the Session is named')
+  await nextTask(t)
+  assert.deepEqual(resources, [['dsh-resource://file/session/session-example/docs/flow.mmd', { revealIfOpened: true }]])
+  assert.equal(runtime.failure, undefined)
+  assert.deepEqual(runtime.errors, [])
+})
+
+test('published client builds DSH file addresses from the session workspace root', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const runtime = await mountPublishedClient(t)
+  const cases = [
+    ['session-example', 'docs/order flow#1.mmd', 'dsh-resource://file/session/session-example/docs/order%20flow%231.mmd'],
+    ['session-example', './docs/flow.mmd', 'dsh-resource://file/session/session-example/docs/flow.mmd'],
+    ['session-example', '/elsewhere/flow.mmd', 'dsh-resource://file/session/session-example//elsewhere/flow.mmd'],
+    ['session-unknown-cwd', '/projects/project/flow.mmd', 'dsh-resource://file/session/session-unknown-cwd//projects/project/flow.mmd'],
+  ]
+  for (const [sessionId, path, address] of cases) {
+    runtime.showSession(sessionId)
+    runtime.send({ ...fileRequest, sessionId, path })
+    await nextTask(t)
+    assert.deepEqual(runtime.resources.at(-1), [address, { revealIfOpened: true }], path)
+  }
+  assert.equal(runtime.resources.length, cases.length)
+})
+
+test('published client shows the open failure after 2 s off screen, and never opens into a superseding session', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const runtime = await mountPublishedClient(t)
+  const { send, resources, errors, dictionaries, render } = runtime
+  send(fileRequest)
+  t.mock.timers.tick(1999)
+  await settle()
+  assert.equal(runtime.failure, undefined)
+  t.mock.timers.tick(1)
+  await settle()
+  assert.equal(runtime.screenListeners.size, 0)
+  assert.equal(runtime.failure, 'openFailed')
+  assert.equal(errors[0][0], '[pixel-town-pstack] could not open file')
+  assert.match(String(errors[0][1]), /not on screen within 2000 ms/)
+  assert.equal(render().props.children.find(child => child?.props?.role === 'alert').props.children, dictionaries[0].dictionary.zh.openFailed)
+  runtime.showSession('session-example')
+  await nextTask(t)
+  assert.deepEqual(resources, [], 'a timed-out request stays abandoned')
+  runtime.showSession(undefined)
+  send(fileRequest)
+  runtime.showSession('session-example')
+  runtime.showSession('session-other')
+  await nextTask(t)
+  assert.deepEqual(resources, [], 'a later navigation took the screen before the open')
+  assert.equal(errors.length, 1)
+  runtime.showSession('session-example')
+  send(fileRequest)
+  await nextTask(t)
+  assert.equal(resources.length, 1)
+  assert.equal(render().props.children.some(child => child?.props?.role === 'alert'), false, 'success clears the alert')
+})
+
+test('published client reports openSession and openResource failures with the open alert', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const runtime = await mountPublishedClient(t)
+  const { ctx, send, errors } = runtime
+  const openSession = ctx.uiWorkspace.openSession
+  const refused = new Error('cannot open')
+  ctx.uiWorkspace.openSession = () => { throw refused }
+  send(fileRequest)
+  await settle()
+  assert.deepEqual([errors[0][0], errors[0][1], runtime.failure], ['[pixel-town-pstack] could not open file', refused, 'openFailed'])
+  assert.equal(runtime.screenListeners.size, 0)
+  ctx.uiWorkspace.openSession = openSession
+  const unclaimed = new Error('sidebarRight: no registered tab type claims')
+  ctx.sidebarRight.openResource = () => { throw unclaimed }
+  runtime.showSession('session-example')
+  send(fileRequest)
+  await nextTask(t)
+  assert.deepEqual([errors[1][1], runtime.failure], [unclaimed, 'openFailed'])
 })
