@@ -875,8 +875,8 @@ test('old logs without committed stage and delivery evidence retain null deliver
   assert.equal(board.finishedAt, null)
 })
 
-test('latest chart is the last committed canvas_check that passed, with its call path verbatim', () => {
-  const l = log()
+test('latest chart is the last committed canvas_check that passed, with its resolved call path', () => {
+  const l = log({ header: { cwd: '/work' } })
   const check = (id, path, isError, scope) => {
     l.call(id, 'canvas_check', { path, image: false }, scope)
     return l.result(id, isError, isError ? 'Error: ✗ 图 4:6' : '✓ 图 校验通过', scope)
@@ -885,7 +885,7 @@ test('latest chart is the last committed canvas_check that passed, with its call
   check('c1', 'docs/flow.mmd', true)
   assert.equal(foldSession(l.events).canvas, null, 'a failed check is not a chart')
   const passed = check('c2', 'docs/flow.mmd', false, { turn: 1, step: 2 })
-  assert.deepEqual(foldSession(l.events).canvas, { path: 'docs/flow.mmd', at: passed.time })
+  assert.deepEqual(foldSession(l.events).canvas, { path: '/work/docs/flow.mmd', at: passed.time })
   const newer = check('c3', '/work/app/order.mmd', false, { turn: 1, step: 3 })
   check('c4', 'docs/flow.mmd', true, { turn: 1, step: 4 })
   assert.deepEqual(foldSession(l.events).canvas, { path: '/work/app/order.mmd', at: newer.time }, 'a later failure keeps the last pass')
@@ -896,15 +896,15 @@ test('latest chart is the last committed canvas_check that passed, with its call
   l.result('c5', false, 'ok', { turn: 2, step: 9 })
   assert.equal(foldSession(l.events).canvas.path, '/work/app/order.mmd')
   const late = l.result('c5', false, 'ok', { turn: 2, step: 1 })
-  assert.deepEqual(foldSession(l.events).canvas, { path: 'pending.mmd', at: late.time })
+  assert.deepEqual(foldSession(l.events).canvas, { path: '/work/pending.mmd', at: late.time })
   // Other tools with a path argument never set the chart.
   l.call('w1', 'write', { path: 'other.mmd', content: 'flowchart LR' }, { turn: 3, step: 1 })
   l.result('w1', false, 'Created file', { turn: 3, step: 1 })
-  assert.equal(foldSession(l.events).canvas.path, 'pending.mmd')
+  assert.equal(foldSession(l.events).canvas.path, '/work/pending.mmd')
 })
 
 test('malformed canvas_check calls and results never set the chart and never throw', () => {
-  const l = log()
+  const l = log({ header: { cwd: '/work' } })
   const raw = (id, args, message, step) => {
     l.append('tool/call', { turn: 1, step, callId: id, name: 'canvas_check', arguments: args })
     l.append('tool/result', { turn: 1, step, message: { role: 'tool', toolCallId: id, content: [{ type: 'text', text: 'ok' }], ...message } })
@@ -921,22 +921,56 @@ test('malformed canvas_check calls and results never set the chart and never thr
   assert.equal(foldSession(l.events).canvas, null)
   // Object arguments (not a JSON string) follow the same reader as every other tool.
   raw('m9', { path: 'object-args.mmd' }, { isError: false }, 10)
-  assert.equal(foldSession(l.events).canvas.path, 'object-args.mmd')
+  assert.equal(foldSession(l.events).canvas.path, '/work/object-args.mmd')
 })
 
 test('latest chart replays identically, survives own end-seed markers, and resets at a fork boundary', () => {
-  const l = log()
+  const l = log({ header: { cwd: '/work' } })
   l.call('c1', 'canvas_check', { path: 'parent.mmd' })
   const parent = l.result('c1')
   const replayed = l.events.reduce(reduce, undefined)
   assert.deepEqual(replayed.board, foldSession(l.events))
-  assert.deepEqual(JSON.parse(JSON.stringify(foldSession(l.events))).canvas, { path: 'parent.mmd', at: parent.time })
+  assert.deepEqual(JSON.parse(JSON.stringify(foldSession(l.events))).canvas, { path: '/work/parent.mmd', at: parent.time })
   l.append('session/end-seed', { inherited: false })
-  assert.equal(foldSession(l.events).canvas.path, 'parent.mmd')
+  assert.equal(foldSession(l.events).canvas.path, '/work/parent.mmd')
   l.append('session/end-seed', { inherited: true })
   assert.equal(foldSession(l.events).canvas, null, 'inherited history is not the fork\'s own chart')
   l.call('c2', 'canvas_check', { path: 'child.mmd' }, { turn: 2, step: 1 })
   l.result('c2', false, 'ok', { turn: 2, step: 1 })
-  assert.equal(foldSession(l.events).canvas.path, 'child.mmd')
-  assert.deepEqual(foldBoard([l.events]).map(board => board.canvas.path), ['child.mmd'])
+  assert.equal(foldSession(l.events).canvas.path, '/work/child.mmd')
+  assert.deepEqual(foldBoard([l.events]).map(board => board.canvas.path), ['/work/child.mmd'])
+})
+
+test('F13 latest chart resolves against working-directory changes at call time and replays deterministically', () => {
+  const l = log({ header: { id: 's1', cwd: '/w' } })
+  l.call('cd', 'working_directory', { cd: 'sub' })
+  l.append('working-directory/change', { cwd: '/w/sub' })
+  l.result('cd')
+  l.call('chart', 'canvas_check', { path: 'plan.mmd' }, { turn: 1, step: 2 })
+  // The result may arrive after another change: only the call-time cwd owns this path.
+  l.append('working-directory/change', { cwd: '/elsewhere' })
+  const result = l.result('chart', false, 'ok', { turn: 1, step: 2 })
+  const expected = { path: '/w/sub/plan.mmd', at: result.time }
+  const full = foldSession(l.events)
+  assert.deepEqual(full.canvas, expected)
+  assert.equal(full.cwd, '/w', 'the public project directory remains the immutable session header')
+  assert.deepEqual(l.events.reduce(reduce, undefined).board, full)
+  assert.deepEqual(foldSession(JSON.parse(JSON.stringify(l.events))), full)
+  for (let boundary = 1; boundary < l.events.length; boundary++) {
+    const prefix = l.events.slice(0, boundary).reduce(reduce, undefined)
+    assert.deepEqual(l.events.slice(boundary).reduce(reduce, prefix).board, full)
+  }
+  l.call('absolute', 'canvas_check', { path: '/fixed/../chart.mmd' }, { turn: 1, step: 3 })
+  l.result('absolute', false, 'ok', { turn: 1, step: 3 })
+  assert.equal(foldSession(l.events).canvas.path, '/fixed/../chart.mmd', 'absolute arguments stay verbatim')
+})
+
+test('F13 unknown cwd never invents a relative chart address, while an absolute path needs no cwd', () => {
+  const l = log()
+  l.call('relative', 'canvas_check', { path: 'plan.mmd' })
+  l.result('relative')
+  assert.equal(foldSession(l.events).canvas, null)
+  l.call('absolute', 'canvas_check', { path: '/w/plan.mmd' }, { turn: 1, step: 2 })
+  l.result('absolute', false, 'ok', { turn: 1, step: 2 })
+  assert.equal(foldSession(l.events).canvas.path, '/w/plan.mmd')
 })

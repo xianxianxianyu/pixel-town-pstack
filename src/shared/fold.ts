@@ -1,3 +1,4 @@
+import { isAbsoluteWorkspacePath, resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
 import { LEGACY_WORKFLOW_IDS, getWorkflow, parseStageInput, transition, workflows } from './workflows.ts'
 import { emptyTrail, foldTrailResult, trailEnabled } from './trail.ts'
 import type { Trail } from './trail.ts'
@@ -79,7 +80,7 @@ export interface BoardSession {
   readonly interruption: { readonly kind: 'aborted' | 'error' | 'interrupted' | 'blocked' | 'max-tokens'; readonly at: number } | null
   readonly status: 'working' | 'idle' | 'needsYou' | 'finished' | 'paused' | 'interrupted'
   readonly delivery: { readonly kind: 'pr' | 'mr' | 'local'; readonly url?: string; readonly at: number } | null
-  /** Latest chart: the `path` argument of the last committed `canvas_check` whose result is `isError: false`. */
+  /** Latest passing canvas_check, resolved against the effective working directory at call time. */
   readonly canvas: { readonly path: string; readonly at: number } | null
   readonly finishedAt: number | null
   readonly needs: {
@@ -107,6 +108,7 @@ interface PendingCall {
   readonly name: string
   readonly args: Record<string, unknown>
   readonly needs: BoardSession['needs']
+  readonly canvasPath?: string
 }
 
 interface ChildState {
@@ -131,6 +133,8 @@ export interface FoldState {
   readonly ordinal: number
   /** Native refs admit goal rounds; they are not part of the town's public view. */
   readonly goalRef: { readonly id: string; readonly revision: number } | null
+  /** DSH's effective directory projection; board.cwd remains the immutable project directory. */
+  readonly workingDirectory: string | null
 }
 
 function initial(): FoldState {
@@ -147,6 +151,7 @@ function initial(): FoldState {
     pending: new Map(), approvals: new Map(), children: new Map(),
     active: false, turnEnded: false, lastToolDetail: '', stageDetail: '', ordinal: 0,
     turnStartOrdinal: 0, checkpointOrdinal: 0, turnInterruption: null, goalRef: null,
+    workingDirectory: null,
   }
 }
 
@@ -298,6 +303,7 @@ export function reduce(previous: FoldState | undefined, event: SessionRecord): F
   if (event.type === 'session') {
     return {
       ...state, ordinal,
+      workingDirectory: typeof event.cwd === 'string' ? event.cwd : null,
       board: {
         ...state.board, sessionId: event.id ?? '',
         parentSessionId: typeof event.parentSession === 'string' ? event.parentSession : null,
@@ -315,10 +321,16 @@ export function reduce(previous: FoldState | undefined, event: SessionRecord): F
   let stageDetail = state.stageDetail
   let turnStartOrdinal = state.turnStartOrdinal, checkpointOrdinal = state.checkpointOrdinal, turnInterruption = state.turnInterruption
   let goalRef = state.goalRef
+  let workingDirectory = state.workingDirectory
   let notable: string | undefined
   let gag: Pick<NonNullable<BoardSession['gag']>, 'kind' | 'text'> | undefined
 
   switch (event.type) {
+    case 'working-directory/change':
+      // DSH packages/session/working-directory/src/index.ts:35-38,82-88,186-191:
+      // init from header.cwd, then replace with the committed absolute directory.
+      if (typeof data.cwd === 'string') workingDirectory = data.cwd
+      break
     case 'goal/change': {
       // DSH packages/goal/goal/src/fold.ts:271-305: each mutation carries the
       // complete snapshot; clear removes it. Future versions are display-ignored.
@@ -388,8 +400,11 @@ export function reduce(previous: FoldState | undefined, event: SessionRecord): F
     case 'tool/call': {
       const name = String(data.name ?? '')
       const args = argumentsOf(data.arguments)
+      const canvasPath = name === 'canvas_check' && typeof args.path === 'string' && args.path !== ''
+        && (workingDirectory !== null || isAbsoluteWorkspacePath(args.path))
+        ? resolveWorkspacePath(workingDirectory ?? undefined, args.path) : undefined
       pending = new Map(pending).set(callKey(data, data.callId), {
-        name, args, needs: name === 'ask_user_question' ? questionNeeds(args) : null,
+        name, args, needs: name === 'ask_user_question' ? questionNeeds(args) : null, ...canvasPath === undefined ? {} : { canvasPath },
       })
       lastToolDetail = typeof args.description === 'string' ? args.description : typeof args.command === 'string' ? args.command : ''
       if (name === 'send_message' && typeof args.agent_id === 'string') {
@@ -473,10 +488,9 @@ export function reduce(previous: FoldState | undefined, event: SessionRecord): F
           board = { ...board, checkpoint: { at, waitingFor: waitingFor.trim(), reason, path: firstLine.startsWith('/') ? firstLine : null } }
           checkpointOrdinal = ordinal
         }
-      } else if (call?.name === 'canvas_check' && message.isError === false
-        && typeof call.args.path === 'string' && call.args.path !== '') {
+      } else if (call?.name === 'canvas_check' && message.isError === false && call.canvasPath !== undefined) {
         // dsh-canvas public contract: isError false ⇔ the file passed validation.
-        board = { ...board, canvas: { path: call.args.path, at } }
+        board = { ...board, canvas: { path: call.canvasPath, at } }
       } else if (call?.name === 'ask_user_question') {
         gag = { kind: 'answered', text: '已收到回答' }
       } else if (gag === undefined && typeof command === 'string'
@@ -554,7 +568,7 @@ export function reduce(previous: FoldState | undefined, event: SessionRecord): F
       if (data.inherited === true) {
         const fresh = initial()
         return {
-          ...fresh, ordinal, goalRef,
+          ...fresh, ordinal, goalRef, workingDirectory,
           board: {
             ...fresh.board, sessionId: board.sessionId, cwd: board.cwd, goal: board.goal,
             parentSessionId: board.parentSessionId,
@@ -598,7 +612,7 @@ export function reduce(previous: FoldState | undefined, event: SessionRecord): F
     subagentCount: children.size,
     events: notable === undefined ? board.events : [...board.events, { type: event.type, at, detail: notable }].slice(-20),
   }
-  return { board, pending, approvals, children, active, turnEnded, turnStartOrdinal, checkpointOrdinal, turnInterruption, lastToolDetail, stageDetail, ordinal, goalRef }
+  return { board, pending, approvals, children, active, turnEnded, turnStartOrdinal, checkpointOrdinal, turnInterruption, lastToolDetail, stageDetail, ordinal, goalRef, workingDirectory }
 }
 
 export function foldSession(events: Iterable<SessionRecord>): BoardSession {
