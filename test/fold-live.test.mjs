@@ -874,3 +874,69 @@ test('old logs without committed stage and delivery evidence retain null deliver
   assert.equal(board.delivery, null)
   assert.equal(board.finishedAt, null)
 })
+
+test('latest chart is the last committed canvas_check that passed, with its call path verbatim', () => {
+  const l = log()
+  const check = (id, path, isError, scope) => {
+    l.call(id, 'canvas_check', { path, image: false }, scope)
+    return l.result(id, isError, isError ? 'Error: ✗ 图 4:6' : '✓ 图 校验通过', scope)
+  }
+  assert.equal(foldSession(l.events).canvas, null)
+  check('c1', 'docs/flow.mmd', true)
+  assert.equal(foldSession(l.events).canvas, null, 'a failed check is not a chart')
+  const passed = check('c2', 'docs/flow.mmd', false, { turn: 1, step: 2 })
+  assert.deepEqual(foldSession(l.events).canvas, { path: 'docs/flow.mmd', at: passed.time })
+  const newer = check('c3', '/work/app/order.mmd', false, { turn: 1, step: 3 })
+  check('c4', 'docs/flow.mmd', true, { turn: 1, step: 4 })
+  assert.deepEqual(foldSession(l.events).canvas, { path: '/work/app/order.mmd', at: newer.time }, 'a later failure keeps the last pass')
+  // The result commits the call; a call still pending is not a chart.
+  l.call('c5', 'canvas_check', { path: 'pending.mmd' }, { turn: 2, step: 1 })
+  assert.equal(foldSession(l.events).canvas.path, '/work/app/order.mmd')
+  // Same provider ID in another model step is a different call (callKey).
+  l.result('c5', false, 'ok', { turn: 2, step: 9 })
+  assert.equal(foldSession(l.events).canvas.path, '/work/app/order.mmd')
+  const late = l.result('c5', false, 'ok', { turn: 2, step: 1 })
+  assert.deepEqual(foldSession(l.events).canvas, { path: 'pending.mmd', at: late.time })
+  // Other tools with a path argument never set the chart.
+  l.call('w1', 'write', { path: 'other.mmd', content: 'flowchart LR' }, { turn: 3, step: 1 })
+  l.result('w1', false, 'Created file', { turn: 3, step: 1 })
+  assert.equal(foldSession(l.events).canvas.path, 'pending.mmd')
+})
+
+test('malformed canvas_check calls and results never set the chart and never throw', () => {
+  const l = log()
+  const raw = (id, args, message, step) => {
+    l.append('tool/call', { turn: 1, step, callId: id, name: 'canvas_check', arguments: args })
+    l.append('tool/result', { turn: 1, step, message: { role: 'tool', toolCallId: id, content: [{ type: 'text', text: 'ok' }], ...message } })
+  }
+  raw('m1', 'not json', { isError: false }, 1)
+  raw('m2', JSON.stringify({ path: 7 }), { isError: false }, 2)
+  raw('m3', JSON.stringify({ path: '' }), { isError: false }, 3)
+  raw('m4', JSON.stringify({ image: true }), { isError: false }, 4)
+  raw('m5', JSON.stringify(['a.mmd']), { isError: false }, 5)
+  raw('m6', JSON.stringify({ path: 'no-flag.mmd' }), {}, 6)
+  raw('m7', JSON.stringify({ path: 'string-flag.mmd' }), { isError: 'false' }, 7)
+  raw('m8', null, { isError: false }, 8)
+  l.append('tool/result', { turn: 1, step: 9, message: { role: 'tool', toolCallId: 'orphan', isError: false, content: 'ok' } })
+  assert.equal(foldSession(l.events).canvas, null)
+  // Object arguments (not a JSON string) follow the same reader as every other tool.
+  raw('m9', { path: 'object-args.mmd' }, { isError: false }, 10)
+  assert.equal(foldSession(l.events).canvas.path, 'object-args.mmd')
+})
+
+test('latest chart replays identically, survives own end-seed markers, and resets at a fork boundary', () => {
+  const l = log()
+  l.call('c1', 'canvas_check', { path: 'parent.mmd' })
+  const parent = l.result('c1')
+  const replayed = l.events.reduce(reduce, undefined)
+  assert.deepEqual(replayed.board, foldSession(l.events))
+  assert.deepEqual(JSON.parse(JSON.stringify(foldSession(l.events))).canvas, { path: 'parent.mmd', at: parent.time })
+  l.append('session/end-seed', { inherited: false })
+  assert.equal(foldSession(l.events).canvas.path, 'parent.mmd')
+  l.append('session/end-seed', { inherited: true })
+  assert.equal(foldSession(l.events).canvas, null, 'inherited history is not the fork\'s own chart')
+  l.call('c2', 'canvas_check', { path: 'child.mmd' }, { turn: 2, step: 1 })
+  l.result('c2', false, 'ok', { turn: 2, step: 1 })
+  assert.equal(foldSession(l.events).canvas.path, 'child.mmd')
+  assert.deepEqual(foldBoard([l.events]).map(board => board.canvas.path), ['child.mmd'])
+})

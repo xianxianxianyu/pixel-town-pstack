@@ -79,6 +79,8 @@ export interface BoardSession {
   readonly interruption: { readonly kind: 'aborted' | 'error' | 'interrupted' | 'blocked' | 'max-tokens'; readonly at: number } | null
   readonly status: 'working' | 'idle' | 'needsYou' | 'finished' | 'paused' | 'interrupted'
   readonly delivery: { readonly kind: 'pr' | 'mr' | 'local'; readonly url?: string; readonly at: number } | null
+  /** Latest chart: the `path` argument of the last committed `canvas_check` whose result is `isError: false`. */
+  readonly canvas: { readonly path: string; readonly at: number } | null
   readonly finishedAt: number | null
   readonly needs: {
     readonly kind: 'question' | 'approval'
@@ -140,7 +142,7 @@ function initial(): FoldState {
       skipped: [], history: [], status: 'idle', needs: null, gag: null, detail: '', lastEventAt: null,
       todos: [], skill: null, todoStage: null, source: 'none', subagentCount: 0, events: [],
       handoffFrom: null, checkpoint: null, interruption: null, trail: null, goal: null,
-      delivery: null, finishedAt: null,
+      delivery: null, canvas: null, finishedAt: null,
     },
     pending: new Map(), approvals: new Map(), children: new Map(),
     active: false, turnEnded: false, lastToolDetail: '', stageDetail: '', ordinal: 0,
@@ -471,6 +473,10 @@ export function reduce(previous: FoldState | undefined, event: SessionRecord): F
           board = { ...board, checkpoint: { at, waitingFor: waitingFor.trim(), reason, path: firstLine.startsWith('/') ? firstLine : null } }
           checkpointOrdinal = ordinal
         }
+      } else if (call?.name === 'canvas_check' && message.isError === false
+        && typeof call.args.path === 'string' && call.args.path !== '') {
+        // dsh-canvas public contract: isError false ⇔ the file passed validation.
+        board = { ...board, canvas: { path: call.args.path, at } }
       } else if (call?.name === 'ask_user_question') {
         gag = { kind: 'answered', text: '已收到回答' }
       } else if (gag === undefined && typeof command === 'string'
