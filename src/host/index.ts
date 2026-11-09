@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { readFile, readdir, stat } from 'node:fs/promises'
-import { isAbsolute, join } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parse as parseYaml } from 'yaml'
 import { foldBoard, foldSession } from '../shared/fold.ts'
-import { DELIVERY_SKILL, LEGACY_WORKFLOW_IDS, getWorkflow, parseStageInput, stageIds, stageProtocol, stageResult, transition, workflowIds, workflows } from '../shared/workflows.ts'
+import { DELIVERY_SKILL, LEGACY_WORKFLOW_IDS, diagramRule, getWorkflow, parseStageInput, stageIds, stageProtocol, stageResult, transition, workflowIds, workflows } from '../shared/workflows.ts'
 import { existingSpillNotice, outputCapTokens, outputPreview, shouldCapOutput } from '../shared/output-cap.ts'
 import { parsePauseInput, savePause } from './pause.ts'
 import type { HostContext, Session, SkillCandidate } from './dsh.ts'
@@ -380,7 +380,21 @@ export function apply(ctx: HostContext, config: Config): void {
       const { workflow, ...skill } = parseSkill(raw, locator)
       const models = workflow === undefined ? undefined : await modelState(ctx, config.root)
       const block = workflow === undefined || !models ? '' : modelRoleBlock(workflow, models.assignments, models.selection)
-      return { ...summary, ...skill, content: block ? `${skill.content}\n\n${block}` : skill.content }
+      const statechart = candidate.name === 'pstack-statechart' ? [
+        '## Installed statechart resources',
+        '',
+        'Use these resolved absolute paths; do not guess the installation directory. Set these variables in the shell used for the doctor and pipeline commands:',
+        '```sh',
+        ...[
+          ['STATECHART_SCRIPT', join(dirname(locator), 'scripts', 'statechart')],
+          ['STATECHART_DOCTOR', join(dirname(locator), 'scripts', 'doctor.mjs')],
+          ['STATECHART_RENDER', join(dirname(locator), 'references', 'render.md')],
+        ].map(([key, value]) => `${key}='${value!.replaceAll("'", "'\\''")}'`),
+        '```',
+        '',
+        diagramRule,
+      ].join('\n') : ''
+      return { ...summary, ...skill, content: [skill.content, block, statechart].filter(Boolean).join('\n\n') }
     },
   }))
 }

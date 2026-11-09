@@ -377,7 +377,7 @@ test('published client starts only manifest or delivery skills and currently reg
       .map(value => ({ ...valid, skill: value })),
   ]) send(data)
   assert.deepEqual(started, [])
-  const skills = ['pstack-bug-fix', 'pstack-runtime-forensics', 'pstack-feature', 'pstack-investigation', 'pstack-perf-issue', 'pstack-trace-forensics', 'pstack-blast-radius', 'pstack-refactoring', 'pstack-prototype', 'pstack-hillclimb', 'pstack-interrogate', 'pstack-multi-phase-plan', 'pstack-eval', 'pstack-create-verification-skill', 'pstack-maintain-verification-skill']
+  const skills = ['pstack-bug-fix', 'pstack-runtime-forensics', 'pstack-feature', 'pstack-investigation', 'pstack-perf-issue', 'pstack-trace-forensics', 'pstack-blast-radius', 'pstack-refactoring', 'pstack-prototype', 'pstack-hillclimb', 'pstack-interrogate', 'pstack-multi-phase-plan', 'pstack-eval', 'pstack-create-verification-skill', 'pstack-maintain-verification-skill', 'pstack-create-formal-verification-skill', 'pstack-maintain-formal-verification-skill']
   assert.deepEqual(workflows.map(workflow => workflow.skill).sort(), skills.toSorted())
   for (const skill of [...skills, 'pstack-opening-a-pr']) {
     send({ ...valid, skill })

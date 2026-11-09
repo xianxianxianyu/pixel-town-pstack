@@ -6,11 +6,13 @@ const surfaceIds = ['bug-fix', 'runtime-forensics', 'feature', 'refactoring', 'p
 const surfaceLine = '仓库里有 `.dsh/skills/verify-*` 时，复现和验证按它的启动、自检、驱动、证据步骤做；没有就跑真实命令，并在回复里建议用「验证工具」生成一个。'
 
 test('verification workflows publish their complete ordered manifest and handbacks', () => {
-  assert.equal(workflows.length, 15)
-  assert.equal(new Set(workflows.map(({ id }) => id)).size, 15)
+  assert.equal(workflows.length, 17)
+  assert.equal(new Set(workflows.map(({ id }) => id)).size, 17)
   for (const [id, name, stages, handbacks] of [
     ['create-verification-skill', '验证工具', ['interview', 'generate', 'map', 'prove', 'handoff'], ['interview']],
     ['maintain-verification-skill', '验证巡检', ['locate', 'index', 'source', 'reconcile', 'live', 'triage', 'ship'], ['locate']],
+    ['create-formal-verification-skill', '形式化验证', ['target', 'tool', 'generate', 'prove', 'handoff'], ['tool']],
+    ['maintain-formal-verification-skill', '形式化巡检', ['locate', 'baseline', 'changes', 'update', 'judge', 'sync', 'report'], ['baseline']],
   ]) {
     const workflow = workflows.find(workflow => workflow.id === id)
     assert.ok(workflow)

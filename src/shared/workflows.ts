@@ -369,6 +369,52 @@ export const workflows = [
         doneWhen: '结论是 clean、changed、blocked 之一' },
     ],
   },
+  {
+    id: 'create-formal-verification-skill', name: '形式化验证', skill: 'pstack-create-formal-verification-skill',
+    stages: [
+      { id: 'target', name: '选定性质',
+        doing: '从真实代码选择破坏代价高、测试最难覆盖的承诺，说明性质、用户损害与代码出处',
+        doneWhen: '目标与代码对应，边界和假设明确' },
+      { id: 'tool', name: '选择工具',
+        doing: '按问题选择模型检查、代码验证器或证明；先自检依赖，未经用户同意不安装',
+        doneWhen: '选择理由、版本、运行方式和依赖明确', handback: '缺少依赖且需要安装时：先征求同意' },
+      { id: 'generate', name: '生成技能',
+        doing: '在 .dsh/skills/<name>/SKILL.md 写可复跑的形式化验证技能，记录覆盖代码、性质、边界、命令和同步提交；TLA+ 结果用 pstack-statechart 解读',
+        doneWhen: '模型或验证器忠于代码，技能无占位且具有 frontmatter' },
+      { id: 'prove', name: '反向证明',
+        doing: '按生成技能运行，在真实代码的临时破坏上证明性质能失败，撤销破坏后重跑；现有缺陷如实报告，不弱化性质',
+        doneWhen: '负向对照被检出，临时破坏已撤销，基线结果与证据保留' },
+      { id: 'handoff', name: '交付',
+        doing: '交付生成技能、工具理由、运行命令、范围、反例和未覆盖项，指向 pstack-maintain-formal-verification-skill',
+        doneWhen: '读者无需懂验证语言也能理解发现并复跑' },
+    ],
+  },
+  {
+    id: 'maintain-formal-verification-skill', name: '形式化巡检', skill: 'pstack-maintain-formal-verification-skill',
+    stages: [
+      { id: 'locate', name: '找到检查',
+        doing: '从 .dsh/skills 查找形式化验证技能，收集性质、覆盖代码、边界、命令与同步提交；没有则停下并指向形式化验证',
+        doneWhen: '每项检查有覆盖记录和同步基点' },
+      { id: 'baseline', name: '记录基线',
+        doing: '修改前运行每项检查，保留原始结果；旧模型通过不等于当前代码正确',
+        doneWhen: '原始通过、失败或阻塞均有证据', handback: '缺少依赖且需要安装时：先征求同意' },
+      { id: 'changes', name: '追踪变化',
+        doing: '从同步提交读覆盖代码的全部变更及提交说明，追踪移动代码和新增同状态写入方，区分无影响、模型漂移、承诺变化和缺陷候选',
+        doneWhen: '每个相关变更已分类且有出处' },
+      { id: 'update', name: '对齐代码',
+        doing: '先依据代码更新模型或验证器再重跑；承诺有意改变才改性质并引用证据，缩小边界必须披露',
+        doneWhen: '验证步骤重新对应真实代码，未用通过结果倒推模型' },
+      { id: 'judge', name: '重跑判定',
+        doing: '通过时用临时破坏证明仍能失败；失败时在真实代码逐步回放反例，区分漂移与缺陷，不修改产品代码',
+        doneWhen: '每项结果判为 in sync、updated、bug 或 blocked，允许 updated 与 bug 并存' },
+      { id: 'sync', name: '同步技能',
+        doing: '更新覆盖、命令、边界、假设和同步提交，再按技能跑一次；blocked 不推进同步提交',
+        doneWhen: '技能步骤可运行，临时破坏已撤销，同步记录准确' },
+      { id: 'report', name: '报告',
+        doing: '报告读过的提交、验证更新理由、负向对照、反例、损害与未覆盖项；验证更新与产品修复分开交付',
+        doneWhen: '漂移与真实缺陷清楚区分，不把陈旧模型的通过称为证明' },
+    ],
+  },
 ] as const satisfies readonly Workflow[]
 
 export type WorkflowId = typeof workflows[number]['id']
@@ -444,7 +490,7 @@ export function transition(current: StagePosition, input: StageInput): Transitio
 
 
 // Diagrams follow the dsh-canvas public contract (skill name, tool, file suffix) and fall back to plain Mermaid.
-const diagramRule = '要画图（流程、状态、架构、依赖）时：可用技能里有 `canvas-diagram` 就先加载它，把图写成 `.mmd` 文件，`canvas_check` 通过后用 `present` 交付；没有就直接输出 `mermaid` 代码块。'
+export const diagramRule = '要画图（流程、状态、架构、依赖）时：可用技能里有 `canvas-diagram` 就先加载它，把图写成 `.mmd` 文件，`canvas_check` 通过后用 `present` 交付；没有就直接输出 `mermaid` 代码块。'
 
 export function stageProtocol(id: string): string {
   const workflow = getWorkflow(id)

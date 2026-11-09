@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer, request } from 'node:http'
+import { execFileSync } from 'node:child_process'
 import test, { after } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { apply } from '../lib/index.js'
@@ -730,6 +731,7 @@ test('every plaque has a short plain Chinese summary with explicit handback boun
   assert.deepEqual(Object.keys(PLAQUES), [
     'investigation', 'prototype', 'multi-phase-plan', 'feature', 'refactoring',
     'interrogate', 'blast-radius', 'eval', 'create-verification-skill', 'maintain-verification-skill',
+    'create-formal-verification-skill', 'maintain-formal-verification-skill',
     'runtime-forensics', 'trace-forensics', 'bug-fix', 'perf-issue', 'hillclimb',
   ])
   for (const { id, summary } of Object.values(PLAQUES)) {
@@ -938,12 +940,12 @@ test('wave-one manifests preserve the named paths and fixed decision points', ()
   assert.equal(explore.doneWhen, '每个角度都有带出处的发现')
 })
 
-test('provider routes fifteen workflows and the plain shared delivery skill', async () => {
+test('provider routes seventeen workflows and the shared delivery and statechart skills', async () => {
   const h = host()
   const candidates = await h.provider.list({})
-  const expected = ['blast-radius', 'bug-fix', 'create-verification-skill', 'eval', 'feature', 'hillclimb', 'interrogate', 'investigation', 'maintain-verification-skill', 'multi-phase-plan', 'perf-issue', 'prototype', 'refactoring', 'runtime-forensics', 'trace-forensics']
+  const expected = ['blast-radius', 'bug-fix', 'create-formal-verification-skill', 'create-verification-skill', 'eval', 'feature', 'hillclimb', 'interrogate', 'investigation', 'maintain-formal-verification-skill', 'maintain-verification-skill', 'multi-phase-plan', 'perf-issue', 'prototype', 'refactoring', 'runtime-forensics', 'trace-forensics']
   assert.deepEqual(workflows.map(workflow => workflow.id).sort(), expected)
-  assert.deepEqual(candidates.map(candidate => candidate.name), [...expected, 'opening-a-pr'].sort().map(id => `pstack-${id}`))
+  assert.deepEqual(candidates.map(candidate => candidate.name), [...expected, 'opening-a-pr', 'statechart'].sort().map(id => `pstack-${id}`))
   const delivery = candidates.find(candidate => candidate.name === 'pstack-opening-a-pr')
   const shared = await h.provider.get(delivery, {})
   assert.match(shared.content, /# Opening a PR\/MR/u)
@@ -969,6 +971,28 @@ test('provider routes fifteen workflows and the plain shared delivery skill', as
     assert.ok(skill.content.includes(protocol))
     assert.equal(skill.content.split('## 阶段协议 (stage protocol)').length, 2)
   }
+})
+
+test('shared statechart load resolves runnable resource paths after installation relocation', async () => {
+  const skillsRoot = await mkdtemp(join(dataRoot, "installed 'skills $-"))
+  await cp(new URL('../skills/pstack-statechart', import.meta.url), join(skillsRoot, 'pstack-statechart'), { recursive: true })
+  const h = host({ config: { skillsRoot } })
+  const candidate = (await h.provider.list({})).find(item => item.name === 'pstack-statechart')
+  const skill = await h.provider.get(candidate, {})
+  assert.doesNotMatch(skill.content, /## 阶段协议|pstack_stage/u)
+  const generated = skill.content.split('## Installed statechart resources\n')[1]
+  assert.ok(generated)
+  const assignments = /```sh\n([\s\S]*?)\n```/u.exec(generated)?.[1]
+  assert.ok(assignments)
+  const paths = execFileSync('sh', ['-c', `${assignments}\nprintf '%s\\n' "$STATECHART_SCRIPT" "$STATECHART_DOCTOR" "$STATECHART_RENDER"`], { encoding: 'utf8' }).trimEnd().split('\n')
+  assert.deepEqual(paths, [
+    join(skillsRoot, 'pstack-statechart/scripts/statechart'),
+    join(skillsRoot, 'pstack-statechart/scripts/doctor.mjs'),
+    join(skillsRoot, 'pstack-statechart/references/render.md'),
+  ])
+  for (const path of paths) assert.ok((await readFile(path)).length > 0)
+  const diagramLine = stageProtocol('create-formal-verification-skill').split('\n').find(line => line.includes('canvas-diagram'))
+  assert.equal(skill.content.split('\n').filter(line => line === diagramLine).length, 1)
 })
 
 test('wave-two manifests expose every fixed stage and optional path', () => {
