@@ -250,7 +250,7 @@ test('formal plaques render 3+4 and launch only workflows advertised by the host
       { type: 'pixel-town-pstack/open-file', sessionId: 'finished-a', path: '/fixture/a.mmd' },
       { type: 'pixel-town-pstack/open-file', sessionId: 'finished-b', path: '/fixture/b.mmd' },
     ]).flat())
-    assert.equal(evidence.allPlaques.length, 17)
+    assert.equal(evidence.allPlaques.length, 18)
     assert.ok(!evidence.allPlaques.includes('statechart') && !evidence.allPlaques.includes('pstack-statechart'))
     for (const layout of [evidence.oldLayout, evidence.newLayout]) {
       assert.equal(layout.length, 7)

@@ -6,8 +6,8 @@ const surfaceIds = ['bug-fix', 'runtime-forensics', 'feature', 'refactoring', 'p
 const surfaceLine = '仓库里有 `.dsh/skills/verify-*` 时，复现和验证按它的启动、自检、驱动、证据步骤做；没有就跑真实命令，并在回复里建议用「验证工具」生成一个。'
 
 test('verification workflows publish their complete ordered manifest and handbacks', () => {
-  assert.equal(workflows.length, 17)
-  assert.equal(new Set(workflows.map(({ id }) => id)).size, 17)
+  assert.equal(workflows.length, 18)
+  assert.equal(new Set(workflows.map(({ id }) => id)).size, 18)
   for (const [id, name, stages, handbacks] of [
     ['create-verification-skill', '验证工具', ['interview', 'generate', 'map', 'prove', 'handoff'], ['interview']],
     ['maintain-verification-skill', '验证巡检', ['locate', 'index', 'source', 'reconcile', 'live', 'triage', 'ship'], ['locate']],
@@ -26,6 +26,22 @@ test('verification workflows publish their complete ordered manifest and handbac
       assert.deepEqual(parseStageInput({ workflow: id, stage: stage.id, note: '开始' }), { workflow: id, stage: stage.id, note: '开始' })
     }
   }
+})
+
+test('figure-it-out mirrors upstream phases A–E, keeps a decision trail and checkpoints only long runs', () => {
+  const workflow = workflows.find(workflow => workflow.id === 'figure-it-out')
+  assert.ok(workflow)
+  assert.equal(workflow.name, '想办法')
+  assert.equal(workflow.skill, 'pstack-figure-it-out')
+  assert.equal(workflow.trail, true)
+  assert.deepEqual(workflow.stages.map(stage => stage.id), ['frame', 'design', 'loop', 'trail', 'verify'])
+  assert.deepEqual(workflow.stages.filter(stage => stage.handback).map(stage => stage.id), ['frame'])
+  assert.match(workflow.stages[0].handback, /数小时/u)
+  assert.match(workflow.stages.find(stage => stage.id === 'loop').doneWhen, /VERIFIED、NOT VERIFIED 或 INCONCLUSIVE/u)
+  const protocol = stageProtocol('figure-it-out')
+  assert.ok(protocol.includes('pstack_stage(workflow="figure-it-out"'))
+  assert.ok(protocol.includes('pstack_log') && protocol.includes('pstack_audit'), 'the trail rules ride along')
+  assert.match(stageResult({ workflow: 'figure-it-out', stage: 'frame', note: '定谓词' }), /工作日志：已开启。/u)
 })
 
 test('surface verification guidance appears once and only for the eight flagged workflows', () => {

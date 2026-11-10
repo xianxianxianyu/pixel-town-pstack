@@ -569,7 +569,7 @@ test('legacy enforcement fields and blocked gags are ignored while stuck becomes
   board.stop()
 })
 
-test('seventeen workflows are available without a handoff table and keep switch provenance', async () => {
+test('eighteen workflows are available without a handoff table and keep switch provenance', async () => {
   const from = { workflow: 'runtime-forensics', stage: 'capture', at: 3000 }
   const raw = payload([
     session({ handoffFrom: from }),
@@ -589,14 +589,15 @@ test('seventeen workflows are available without a handoff table and keep switch 
     session({ sessionId: 'maintain-verification-skill', workflow: 'maintain-verification-skill', stage: 'live' }),
     session({ sessionId: 'create-formal-verification-skill', workflow: 'create-formal-verification-skill', stage: 'prove' }),
     session({ sessionId: 'maintain-formal-verification-skill', workflow: 'maintain-formal-verification-skill', stage: 'judge' }),
+    session({ sessionId: 'figure-it-out', workflow: 'figure-it-out', stage: 'loop' }),
     session({ sessionId: 'adr', workflow: 'adr', stage: 'decide' }),
   ])
   const mapped = mapBoard(raw)
   assert.deepEqual(mapped.workflows.filter(workflow => workflow.available).map(workflow => workflow.id).sort(), [
-    'blast-radius', 'bug-fix', 'create-formal-verification-skill', 'create-verification-skill', 'eval', 'feature', 'hillclimb', 'interrogate', 'investigation',
+    'blast-radius', 'bug-fix', 'create-formal-verification-skill', 'create-verification-skill', 'eval', 'feature', 'figure-it-out', 'hillclimb', 'interrogate', 'investigation',
     'maintain-formal-verification-skill', 'maintain-verification-skill', 'multi-phase-plan', 'perf-issue', 'prototype', 'refactoring', 'runtime-forensics', 'trace-forensics',
   ])
-  assert.equal(mapped.residents.length, 17)
+  assert.equal(mapped.residents.length, 18)
   assert.deepEqual(mapped.others.map(session => session.id), ['adr'])
   assert.deepEqual(mapped.residents[0].handoffFrom, from)
   assert.equal(mapped.residents[1].handoffFrom, null)
@@ -611,9 +612,9 @@ test('seventeen workflows are available without a handoff table and keep switch 
   board.stop()
 })
 
-test('all seventeen workflows have complete stage art and plaque identities remain stable', () => {
+test('all eighteen workflows have complete stage art and plaque identities remain stable', () => {
   const mapped = mapBoard(payload())
-  assert.equal(Object.keys(ART).length, 17)
+  assert.equal(Object.keys(ART).length, 18)
   for (const workflow of workflows) {
     assert.deepEqual(Object.keys(ART[workflow.id].stages), workflow.stages.map(stage => stage.id))
     assert.ok(mapped.workflows.find(candidate => candidate.id === workflow.id).stages.every(stage => stage.skills.length > 0))
@@ -636,6 +637,7 @@ test('all seventeen workflows have complete stage art and plaque identities rema
     ['maintain-verification-skill', '验证巡检', 'detective', ['locate', 'index', 'source', 'reconcile', 'live', 'triage', 'ship']],
     ['create-formal-verification-skill', '形式化验证', 'detective', ['target', 'tool', 'generate', 'prove', 'handoff']],
     ['maintain-formal-verification-skill', '形式化巡检', 'detective', ['locate', 'baseline', 'changes', 'update', 'judge', 'sync', 'report']],
+    ['figure-it-out', '想办法', 'construction', ['frame', 'design', 'loop', 'trail', 'verify']],
   ]) {
     const workflow = mapped.workflows.find(workflow => workflow.id === id)
     assert.equal(workflow.available, true)

@@ -729,7 +729,7 @@ test('headless works without optional services; authenticated board returns the 
 
 test('every plaque has a short plain Chinese summary with explicit handback boundaries', () => {
   assert.deepEqual(Object.keys(PLAQUES), [
-    'investigation', 'prototype', 'multi-phase-plan', 'feature', 'refactoring',
+    'investigation', 'prototype', 'multi-phase-plan', 'feature', 'refactoring', 'figure-it-out',
     'interrogate', 'blast-radius', 'eval', 'create-verification-skill', 'maintain-verification-skill',
     'create-formal-verification-skill', 'maintain-formal-verification-skill',
     'runtime-forensics', 'trace-forensics', 'bug-fix', 'perf-issue', 'hillclimb',
@@ -940,12 +940,14 @@ test('wave-one manifests preserve the named paths and fixed decision points', ()
   assert.equal(explore.doneWhen, '每个角度都有带出处的发现')
 })
 
-test('provider routes seventeen workflows and the shared delivery and statechart skills', async () => {
+test('provider routes eighteen workflows, the user-only entry and the shared delivery and statechart skills', async () => {
   const h = host()
   const candidates = await h.provider.list({})
-  const expected = ['blast-radius', 'bug-fix', 'create-formal-verification-skill', 'create-verification-skill', 'eval', 'feature', 'hillclimb', 'interrogate', 'investigation', 'maintain-formal-verification-skill', 'maintain-verification-skill', 'multi-phase-plan', 'perf-issue', 'prototype', 'refactoring', 'runtime-forensics', 'trace-forensics']
+  const expected = ['blast-radius', 'bug-fix', 'create-formal-verification-skill', 'create-verification-skill', 'eval', 'feature', 'figure-it-out', 'hillclimb', 'interrogate', 'investigation', 'maintain-formal-verification-skill', 'maintain-verification-skill', 'multi-phase-plan', 'perf-issue', 'prototype', 'refactoring', 'runtime-forensics', 'trace-forensics']
   assert.deepEqual(workflows.map(workflow => workflow.id).sort(), expected)
-  assert.deepEqual(candidates.map(candidate => candidate.name), [...expected, 'opening-a-pr', 'statechart'].sort().map(id => `pstack-${id}`))
+  assert.deepEqual(candidates.map(candidate => candidate.name), [...expected, 'opening-a-pr', 'poteto-mode', 'statechart'].sort().map(id => `pstack-${id}`))
+  assert.deepEqual(candidates.filter(candidate => !candidate.invocation.modelInvocable).map(candidate => candidate.name), ['pstack-poteto-mode'])
+  assert.ok(candidates.every(candidate => candidate.invocation.userInvocable))
   const delivery = candidates.find(candidate => candidate.name === 'pstack-opening-a-pr')
   const shared = await h.provider.get(delivery, {})
   assert.match(shared.content, /# Opening a PR\/MR/u)
@@ -1032,6 +1034,98 @@ test('disable-model-invocation makes a town skill user-only and leaves the rest 
   assert.deepEqual(loaded.invocation, { modelInvocable: false, userInvocable: true })
   assert.equal(Object.hasOwn(loaded, 'modelInvocable'), false)
   assert.match(loaded.content, /# Opening a PR\/MR/u)
+})
+
+const upstreamPlaybooks = [
+  'Investigation', 'Bug fix', 'Perf issue', 'Hillclimb', 'Runtime forensics', 'Trace forensics', 'Feature', 'Refactoring',
+  'Prototype', 'Visual parity', 'Authoring or modifying a skill', 'Eval', 'Multi-phase or multi-PR plan', 'Autonomous run',
+  'Session pickup', 'Pause safely', 'Opening a PR', 'Babysit', 'Shipping', 'Autopilot-full', 'Autopilot-stack', 'Orchestrate',
+  'Worktree and simulator cleanup',
+]
+const section = (text, heading) => text.split(`\n## ${heading}\n`)[1].split('\n## ')[0]
+const tableRows = text => text.split('\n').filter(line => line.startsWith('| ') && !line.startsWith('|---'))
+  .slice(1).map(line => line.slice(2, -2).split(' | '))
+
+test('poteto mode is user-only and routes all 23 upstream playbooks to loadable town skills or an honest not-ported line', async () => {
+  const raw = await readFile(new URL('../skills/pstack-poteto-mode/SKILL.md', import.meta.url), 'utf8')
+  const frontmatter = raw.split('\n---\n')[0]
+  assert.match(frontmatter, /^disable-model-invocation: true$/mu)
+  assert.doesNotMatch(frontmatter, /^metadata:/mu, 'the entry runs no stage protocol of its own')
+  const h = host()
+  const candidates = await h.provider.list({})
+  const entry = candidates.find(candidate => candidate.name === 'pstack-poteto-mode')
+  assert.deepEqual(entry.invocation, { modelInvocable: false, userInvocable: true })
+  const loadable = new Set(candidates.filter(candidate => candidate.invocation.modelInvocable).map(candidate => candidate.name))
+  const playbooks = section(raw, 'Playbooks')
+  const [main, townOnly] = playbooks.split('\n\n').filter(block => block.startsWith('| ')).map(tableRows)
+  assert.deepEqual(main.map(([name]) => name), upstreamPlaybooks)
+  const route = Object.fromEntries(main.map(([name, , target]) => [name, target]))
+  assert.deepEqual(main.filter(([, , target]) => target === 'Not ported.').map(([name]) => name),
+    ['Babysit', 'Shipping', 'Autopilot-full', 'Autopilot-stack', 'Orchestrate', 'Worktree and simulator cleanup'])
+  assert.equal(route['Autonomous run'], '`pstack-figure-it-out`')
+  assert.equal(route['Opening a PR'], '`pstack-opening-a-pr`')
+  assert.match(route['Pause safely'], /^`pstack_pause` with `reason="requested"`/u)
+  assert.match(route['Session pickup'], /存档点 → 续接笔记/u)
+  for (const [name, , target] of main) {
+    if (target === 'Not ported.') continue
+    assert.match(target, /`(pstack-[a-z-]+|pstack_pause)`/u, `${name} names a town route`)
+  }
+  // Slash commands (/pstack-trail, /pstack-pause, this entry itself) are user gestures, not skill-tool loads.
+  for (const name of new Set(raw.slice(frontmatter.length).match(/(?<![/\w])pstack-[a-z]+(?:-[a-z]+)*\b/gu))) {
+    assert.ok(loadable.has(name), `${name} is a skill the model can load through the skill tool`)
+  }
+  const routed = new Set(playbooks.match(/`pstack-[a-z-]+`/gu).map(quoted => quoted.slice(1, -1)))
+  for (const workflow of workflows) assert.ok(routed.has(workflow.skill), `${workflow.skill} has a route`)
+  assert.equal(townOnly.length, 6)
+  assert.match(playbooks, /Open a todolist whose first items are the matched playbook's steps, copied in verbatim/u)
+  assert.match(playbooks, /`skip: <reason>`/u)
+  assert.match(playbooks, /\*\*New task\.\*\*/u)
+  assert.match(playbooks, /\*\*Follow up short\.\*\*/u)
+  assert.match(section(raw, 'Writing the reply'), /Chinese prose too[^\n]*`——`[^\n]*`：`/u)
+})
+
+test('poteto mode and figure-it-out inject the resolved principle paths, and every index entry is a vendored leaf', async () => {
+  const skillsRoot = await mkdtemp(join(dataRoot, "installed 'poteto $-"))
+  for (const name of ['pstack-poteto-mode', 'pstack-figure-it-out']) {
+    await cp(new URL(`../skills/${name}`, import.meta.url), join(skillsRoot, name), { recursive: true })
+  }
+  const h = host({ config: { skillsRoot } })
+  const candidates = await h.provider.list({})
+  const skillFile = join(skillsRoot, 'pstack-poteto-mode', 'SKILL.md')
+  const leaves = join(skillsRoot, 'pstack-poteto-mode', 'references', 'principles')
+  for (const name of ['pstack-poteto-mode', 'pstack-figure-it-out']) {
+    const { content } = await h.provider.get(candidates.find(candidate => candidate.name === name), {})
+    const block = content.split('\n## Poteto principles\n')[1]
+    assert.ok(block, `${name} carries the generated principles block`)
+    assert.ok(block.includes(`\`${skillFile}\``), `${name} names the poteto-mode skill file`)
+    assert.ok(block.includes(`\`${leaves}\``), `${name} names the leaf directory`)
+    assert.equal(content.includes('## 阶段协议 (stage protocol)'), name === 'pstack-figure-it-out')
+  }
+  const { content: figure } = await h.provider.get(candidates.find(candidate => candidate.name === 'pstack-figure-it-out'), {})
+  assert.match(figure, /read the `## Principles` section of the poteto-mode skill file named under \*\*Poteto principles\*\*/u)
+  assert.match(figure, /straight from the 想办法 plaque/u)
+  const index = section(await readFile(skillFile, 'utf8'), 'Principles').split('\nThe leaves are upstream text')[0]
+  const titles = [...index.matchAll(/^- \*\*([^*]+?)\.?\*\*(?: \(`([a-z-]+)\.md`\))?/gmu)]
+  assert.equal(titles.length, 24)
+  const files = new Set(await readdir(leaves))
+  for (const [, title, given] of titles) {
+    const file = `${given ?? title.toLowerCase().replace(/[^a-z0-9 -]/gu, '').replace(/ /gu, '-')}.md`
+    assert.ok(files.has(file), `${title} resolves to ${file}`)
+  }
+  assert.equal(files.size, 24)
+})
+
+test('poteto mode carries worker and reviewer model routes only when they are assigned', async () => {
+  const root = await mkdtemp(join(dataRoot, 'models-entry-'))
+  const h = host({ config: { root }, subagentModelSelection: { current: () => ({ enabled: true, allowedModels: [pro, flash] }) } })
+  const entry = (await h.provider.list({})).find(candidate => candidate.name === 'pstack-poteto-mode')
+  assert.doesNotMatch((await h.provider.get(entry, {})).content, /子 agent 模型（小镇告示牌/u)
+  await writeFile(join(root, 'models.json'), JSON.stringify({ version: 1, roles: { ...emptyRoles(), worker: [flash], reviewer: [pro] } }))
+  const block = (await h.provider.get(entry, {})).content.split('子 agent 模型（小镇告示牌 → 模型分工）：')[1]
+  assert.ok(block)
+  assert.match(block, /干活的子 agent用 deepseek-account\/deepseek-flash/u)
+  assert.match(block, /审查方用 deepseek-account\/deepseek-v4-pro/u)
+  assert.doesNotMatch(block, /eval 候选|eval 评审/u)
 })
 
 test('wave-two manifests expose every fixed stage and optional path', () => {

@@ -4,7 +4,7 @@ import { dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parse as parseYaml } from 'yaml'
 import { foldBoard, foldSession } from '../shared/fold.ts'
-import { DELIVERY_SKILL, LEGACY_WORKFLOW_IDS, diagramRule, getWorkflow, parseStageInput, stageIds, stageProtocol, stageResult, transition, workflowIds, workflows } from '../shared/workflows.ts'
+import { DELIVERY_SKILL, ENTRY_SKILL, LEGACY_WORKFLOW_IDS, diagramRule, getWorkflow, parseStageInput, stageIds, stageProtocol, stageResult, transition, workflowIds, workflows } from '../shared/workflows.ts'
 import { existingSpillNotice, outputCapTokens, outputPreview, shouldCapOutput } from '../shared/output-cap.ts'
 import { parsePauseInput, savePause } from './pause.ts'
 import type { HostContext, Session, SkillCandidate } from './dsh.ts'
@@ -388,8 +388,18 @@ export function apply(ctx: HostContext, config: Config): void {
       const { rank: _rank, locator, ...summary } = candidate
       const raw = await readFile(locator, { encoding: 'utf8', signal })
       const { workflow, modelInvocable: _modelInvocable, ...skill } = parseSkill(raw, locator)
-      const models = workflow === undefined ? undefined : await modelState(ctx, config.root)
-      const block = workflow === undefined || !models ? '' : modelRoleBlock(workflow, models.assignments, models.selection)
+      const entry = candidate.name === ENTRY_SKILL
+      const models = workflow === undefined && !entry ? undefined : await modelState(ctx, config.root)
+      const block = models ? modelRoleBlock(workflow, models.assignments, models.selection) : ''
+      // figure-it-out reads the same index whether it was routed here or started from its plaque.
+      const poteto = entry ? dirname(locator) : workflow === 'figure-it-out' ? join(dirname(locator), '..', ENTRY_SKILL) : undefined
+      const principles = poteto === undefined ? '' : [
+        '## Poteto principles',
+        '',
+        'Use these resolved absolute paths; do not guess the installation directory.',
+        `- Poteto-mode skill file, with the Principles index: \`${join(poteto, 'SKILL.md')}\``,
+        `- Principle leaves, one \`<name>.md\` per principle: \`${join(poteto, 'references', 'principles')}\``,
+      ].join('\n')
       const statechart = candidate.name === 'pstack-statechart' ? [
         '## Installed statechart resources',
         '',
@@ -404,7 +414,7 @@ export function apply(ctx: HostContext, config: Config): void {
         '',
         diagramRule,
       ].join('\n') : ''
-      return { ...summary, ...skill, content: [skill.content, block, statechart].filter(Boolean).join('\n\n') }
+      return { ...summary, ...skill, content: [skill.content, block, principles, statechart].filter(Boolean).join('\n\n') }
     },
   }))
 }

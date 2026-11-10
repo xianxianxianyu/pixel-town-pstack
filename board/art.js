@@ -186,6 +186,16 @@ export const ART = {
       report: { skills: ['technical-writing', 'unslop'], prop: '漂移与缺陷报告', gag: 'parcel' },
     },
   },
+  'figure-it-out': {
+    name: '想办法', theme: '工地', color: '#0ea5e9',
+    stages: {
+      frame: { skills: ['figure-it-out', 'principle-prove-it-works'], prop: '完成判据', gag: 'check' },
+      design: { skills: ['principle-foundational-thinking', 'architect'], prop: '阶段清单', gag: 'map' },
+      loop: { skills: ['principle-sequence-verifiable-units'], prop: '实验记录', gag: 'spark' },
+      trail: { skills: ['show-me-your-work'], prop: '工作日志', gag: 'ink' },
+      verify: { skills: ['principle-prove-it-works', 'principle-encode-lessons-in-structure'], prop: '验收章', gag: 'stamp' },
+    },
+  },
 };
 
 // Sources are relative to upstream pstack/skills.
@@ -209,6 +219,10 @@ export const PLAQUES = {
   refactoring: {
     id: 'refactoring', name: '重构', building: 'construction', source: 'poteto-mode/playbooks/refactoring.md', kind: 'playbook',
     summary: '代码越来越难读，但现有功能应保持不变时，用它整理结构。它会先记录现有行为，删除多余代码，再分小步调整并检查行为是否一致。你会得到更容易维护的代码，以及功能没有被改变的验证结果。',
+  },
+  'figure-it-out': {
+    id: 'figure-it-out', name: '想办法', building: 'construction', source: 'figure-it-out/SKILL.md', kind: 'skill',
+    summary: '活儿大、跨很多地方，或者你想放手离开回头再验收时用这个；没有合适的木牌时也走这里。它先写下可检验的完成标准，再为这件事设计专属的分步流程，每步当实验做，推进才保留。你会拿到设计的流程、逐步的验证结论和一份可审计的工作日志。',
   },
   interrogate: {
     id: 'interrogate', name: '代码审查', building: 'detective', source: 'interrogate/SKILL.md', kind: 'skill',
@@ -399,6 +413,10 @@ export const PROPS = {
   ],
   refactoring: [
     '.b................b', '.bccccccccccccccccb', '.b.x..........x...b', '.b..x........x....b', '.b...x......x.....b', '.b....x....x......b', '.bzzzzzzzzzzzzzzzzy', '.b.y.............xb', '.b..y............xb...cccc', '.b...y...........xb...cbba', '.b....y..........xb....yx', '.b.....y.........xb....yx', 'abbba..........abbba...yx',
+  ],
+  // A blueprint easel with a three-box flow drawn on it, and the idea's bulb beside it.
+  'figure-it-out': [
+    '..................jj', '.................jWjY', '.................jjjY', '..................YY', 'BBBBBBBBBBBBBBBB..ab', 'BuuuuuuuuuuuuuuB', 'BuWWWuuuuuuWWWuB', 'BuWuWiiiiiiWuWuB', 'BuWWWuuuuuuWWWuB', 'BuuuuuuuuuuuiuuB', 'BuuuuWWWiiiiiuuB', 'BuuuuWuWuuuuuuuB', 'BuuuuWWWuuuuuuuB', 'BBBBBBBBBBBBBBBB', '..xw........xw', '..xw........xw', '.xw..........xw',
   ],
   interrogate: [
     '.......cddddc', '......cdiiiiWc', '.....cdiiiiiiWc', '.....cdiiWiiiWc', '.....cdiiiiiiWc', '......cddiiidc', '.......cccccc', '..gWWWWWWWyxWWWWWg......r', '..gWrrrWWWWyxW333g.....r', '..gWWWWWWWWWyxWWWg....r', '..gW333WWWWrrrWWWg...r', '..gWWWWWWWWWWWWWWg..r', 'zzzzzzzzzzzzzzzzzzzzzzzzzy', 'yxxxxxxxxxxxxxxxxxxxxxxxxw', '.xw....................xw.', '.ww....................ww.',

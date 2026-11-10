@@ -1,8 +1,8 @@
 import { getWorkflow } from './workflows.ts'
 
 export const modelRoles = [
-  { id: 'worker', name: '干活的子 agent', usedBy: '探索、实现、解析大文件（委派工作的工作流）', maxRoutes: 1 },
-  { id: 'reviewer', name: '审查方', usedBy: '代码审查；工作日志交还前审查；爆炸半径的可选第二意见', maxRoutes: 3 },
+  { id: 'worker', name: '干活的子 agent', usedBy: '探索、实现、解析大文件（委派工作的工作流和 poteto 模式）', maxRoutes: 1 },
+  { id: 'reviewer', name: '审查方', usedBy: '代码审查；工作日志交还前审查；爆炸半径和 poteto 模式的第二意见', maxRoutes: 3 },
   { id: 'candidate', name: 'eval 候选', usedBy: 'eval 的候选执行者', maxRoutes: 4 },
   { id: 'judge', name: 'eval 评审', usedBy: 'eval 的匿名盲评', maxRoutes: 1 },
 ] as const
@@ -73,10 +73,14 @@ export function parseAssignments(raw: unknown, selection?: ModelSelection): Mode
   return assignments
 }
 
-/** Append only the roles this workflow consumes; ordinary empty workers cost no tokens. */
-export function modelRoleBlock(workflow: string, assignments: ModelAssignments, selection: ModelSelection, optedIn = false): string {
-  const trail = optedIn || getWorkflow(workflow).trail === true
-  const roles: ModelRole[] = workflow === 'interrogate' || workflow === 'blast-radius' ? ['reviewer']
+/**
+ * Append only the roles this workflow consumes; ordinary empty workers cost no tokens.
+ * `undefined` is the poteto-mode entry: its delegates use the worker, its second opinions the reviewer.
+ */
+export function modelRoleBlock(workflow: string | undefined, assignments: ModelAssignments, selection: ModelSelection, optedIn = false): string {
+  const trail = optedIn || (workflow !== undefined && getWorkflow(workflow).trail === true)
+  const roles: ModelRole[] = workflow === undefined ? ['worker', 'reviewer']
+    : workflow === 'interrogate' || workflow === 'blast-radius' ? ['reviewer']
     : workflow === 'eval' ? ['candidate', 'judge'] : ['worker']
   if (trail && !roles.includes('reviewer')) roles.push('reviewer')
   const required = workflow === 'interrogate' || workflow === 'eval'

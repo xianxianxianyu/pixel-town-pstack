@@ -1,6 +1,8 @@
 import { trailEnabled, trailRules } from './trail.ts'
 
 export const DELIVERY_SKILL = 'pstack-opening-a-pr'
+/** User-only entry: one goal, routed to a workflow under poteto's rules. */
+export const ENTRY_SKILL = 'pstack-poteto-mode'
 
 /** Read compatibility only: live stage reports must use the canonical ids. */
 export const LEGACY_WORKFLOW_IDS: Readonly<Record<string, string>> = {
@@ -413,6 +415,26 @@ export const workflows = [
       { id: 'report', name: '报告',
         doing: '报告读过的提交、验证更新理由、负向对照、反例、损害与未覆盖项；验证更新与产品修复分开交付',
         doneWhen: '漂移与真实缺陷清楚区分，不把陈旧模型的通过称为证明' },
+    ],
+  },
+  {
+    id: 'figure-it-out', name: '想办法', skill: 'pstack-figure-it-out', trail: true,
+    stages: [
+      { id: 'frame', name: '定框架',
+        doing: '先摸底再承诺：写下可证伪的完成谓词、量化的范围和阻塞、偏高的严谨度；长跑前把框架和取舍讲给人听',
+        doneWhen: '谓词、范围和严谨度已写下并告诉了人', handback: '预计连跑数小时：开跑前给人看一次框架' },
+      { id: 'design', name: '设计流程',
+        doing: '拆成可独立落地的单元，风险最大的未知先做；先建验证工具并记下改动前基线；单向门的设计先比两套方案；只沿接缝并行；写下阶段列表',
+        doneWhen: '阶段列表已写下，验证工具和基线就位' },
+      { id: 'loop', name: '循环实验',
+        doing: '每个单元是一次实验：假设、最小改动、在真实产物上对照谓词测量，推进就留，否则撤回；逐单元验证，委派的工作配评审',
+        doneWhen: '每个单元判为 VERIFIED、NOT VERIFIED 或 INCONCLUSIVE，并有证据（可反复进入）' },
+      { id: 'trail', name: '审计日志',
+        doing: '每落地一步已记一行 pstack_log；交还前 pstack_audit 审计补缺，再交审查方复核并记录结果',
+        doneWhen: '审计发现已处理，复核结果已记录' },
+      { id: 'verify', name: '验证交还',
+        doing: '在真实产品上对照框架谓词验证整体，不只看验证工具；把反复出现的纠正固化成检查或脚本',
+        doneWhen: '谓词在真实产品上有判定，回复按 Reply 写完' },
     ],
   },
 ] as const satisfies readonly Workflow[]
