@@ -244,6 +244,12 @@ test('old hosts: pre-rename workflow ids reach the renamed plaques at the mappin
   assert.equal(table.deliverySkill, 'pstack-opening-a-pr')
 })
 
+test('only a host that advertises the entry skill gets one; blank or missing values stay null', () => {
+  assert.equal(mapBoard({ workflows, deliverySkill: 'pstack-opening-a-pr', sessions: [] }).entrySkill, null)
+  for (const entrySkill of ['', '  ', 7, null]) assert.equal(mapBoard({ workflows, entrySkill, sessions: [] }).entrySkill, null)
+  assert.equal(mapBoard({ workflows, entrySkill: 'pstack-poteto-mode', sessions: [] }).entrySkill, 'pstack-poteto-mode')
+})
+
 test('manifest alone supplies stage structure; absent workflows have no stages or residents', () => {
   const manifest = [{ id: 'bug-fix', name: '来自主机的工作流', stages: [
     { id: 'verify', name: '主机第一站', doing: '执行真实命令', doneWhen: '输出通过', optional: true },

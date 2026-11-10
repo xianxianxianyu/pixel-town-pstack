@@ -272,7 +272,7 @@ export function apply(ctx: HostContext, config: Config): void {
     routeCtx.connection.fetch.register({
       path: '/api/pixel-town-pstack/board', methods: ['GET'], requestBody: 'buffered',
       async fetch() {
-        return Response.json({ workflows, deliverySkill: DELIVERY_SKILL, legacyWorkflowIds: LEGACY_WORKFLOW_IDS, sessions: foldBoard(routeCtx.sessions.list().map(sessionRecords)) })
+        return Response.json({ workflows, deliverySkill: DELIVERY_SKILL, entrySkill: ENTRY_SKILL, legacyWorkflowIds: LEGACY_WORKFLOW_IDS, sessions: foldBoard(routeCtx.sessions.list().map(sessionRecords)) })
       },
     })
     routeCtx.connection.fetch.register({

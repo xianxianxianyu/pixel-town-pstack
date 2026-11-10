@@ -712,8 +712,9 @@ test('headless works without optional services; authenticated board returns the 
   const response = await h.route.fetch(new Request('http://localhost/api/pixel-town-pstack/board'))
   assert.equal(response.status, 200)
   const payload = await response.json()
-  assert.deepEqual(Object.keys(payload).sort(), ['deliverySkill', 'legacyWorkflowIds', 'sessions', 'workflows'])
+  assert.deepEqual(Object.keys(payload).sort(), ['deliverySkill', 'entrySkill', 'legacyWorkflowIds', 'sessions', 'workflows'])
   assert.equal(payload.deliverySkill, 'pstack-opening-a-pr')
+  assert.equal(payload.entrySkill, 'pstack-poteto-mode')
   assert.deepEqual(payload.legacyWorkflowIds, { requirement: 'feature', 'bug-analysis': 'runtime-forensics' })
   assert.deepEqual(payload.workflows, workflows)
   const { sessions } = payload

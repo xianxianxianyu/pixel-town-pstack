@@ -167,8 +167,9 @@ export function mapBoard(payload) {
       inTown: Boolean(ART[session.workflow] && byId.get(session.workflow)?.available && stage),
     };
   });
-  const deliverySkill = typeof payload.deliverySkill === 'string' && payload.deliverySkill.trim() ? payload.deliverySkill : null;
-  return { workflows, deliverySkill, sessions, residents: sessions.filter((session) => session.inTown), others: sessions.filter((session) => !session.inTown) };
+  const skill = (value) => typeof value === 'string' && value.trim() ? value : null;
+  // Hosts advertise the skills their own client will prefill; older hosts send neither or only delivery.
+  return { workflows, deliverySkill: skill(payload.deliverySkill), entrySkill: skill(payload.entrySkill), sessions, residents: sessions.filter((session) => session.inTown), others: sessions.filter((session) => !session.inTown) };
 }
 
 export function createBoard(environment = globalThis) {
@@ -223,6 +224,7 @@ export function createBoard(environment = globalThis) {
     STATUS,
     get WORKFLOWS() { return view.workflows; },
     get deliverySkill() { return view.deliverySkill; },
+    get entrySkill() { return view.entrySkill; },
     get connection() { return connection; },
     workflow, stageIndex, currentStage, nextStage,
     stageState(session, stageId) {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
 import { openFileFromMessage, sessionFromMessage, startSessionFromMessage, workspacesRequestFromMessage } from '../../board/navigation.js'
-import { DELIVERY_SKILL, workflows } from '../shared/workflows.ts'
+import { DELIVERY_SKILL, ENTRY_SKILL, workflows } from '../shared/workflows.ts'
 import type { ClientContext } from './dsh.ts'
 import { NS, en, zh } from './locales.ts'
 
@@ -73,7 +73,7 @@ function TownPage({ openSession, openFile, startSession, workspaces, t, workspac
       }
       const start = startSessionFromMessage(event, source, origin)
       if (start !== undefined) {
-        if (start.skill !== DELIVERY_SKILL && !workflows.some(workflow => workflow.skill === start.skill)) return
+        if (start.skill !== DELIVERY_SKILL && start.skill !== ENTRY_SKILL && !workflows.some(workflow => workflow.skill === start.skill)) return
         if (start.workspaceId !== undefined
           && !workspaces.list.getSnapshot().items.some(workspace => workspace.workspaceId === start.workspaceId)) return
         try {

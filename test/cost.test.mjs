@@ -156,7 +156,7 @@ test('board route rolls up only attached children alongside the manifest and lau
   }
   apply(ctx, { root: join(tmpdir(), 'pstack-cost-test') })
   const payload = await (await route.fetch()).json()
-  assert.deepEqual(Object.keys(payload).sort(), ['deliverySkill', 'legacyWorkflowIds', 'sessions', 'workflows'])
+  assert.deepEqual(Object.keys(payload).sort(), ['deliverySkill', 'entrySkill', 'legacyWorkflowIds', 'sessions', 'workflows'])
   assert.deepEqual(payload.sessions.map(s => s.sessionId), ['parent'])
   assert.equal(payload.sessions[0].cost.tokens, 50)
   assert.equal(payload.sessions[0].cost.children, 1)

@@ -1,33 +1,13 @@
 // Standalone proof (after the normal build):
 // OLD_TOWN_WORKFLOWS=/path/to/frozen/workflows.js CHROME_BIN=/path/to/chrome node --test test/formal-board.test.mjs
-// Chrome uses a disposable directory and an ephemeral loopback server, never DSH or a user's profile.
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
-import { once } from 'node:events'
-import { constants } from 'node:fs'
-import { access, mkdtemp, readFile, rm } from 'node:fs/promises'
-import { createServer } from 'node:http'
-import { tmpdir } from 'node:os'
-import { delimiter, join } from 'node:path'
 import test from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { workflows } from '../lib/workflows.js'
+import { boardProof } from './fixtures/board-proof.mjs'
 
 const formal = ['create-formal-verification-skill', 'maintain-formal-verification-skill']
 const names = ['形式化验证', '形式化巡检']
-
-async function chromeExecutable() {
-  const candidates = process.env.CHROME_BIN ? [process.env.CHROME_BIN] : [
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ...(process.env.PATH ?? '').split(delimiter).filter(Boolean).flatMap(directory =>
-      ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'].map(name => join(directory, name))),
-  ]
-  for (const candidate of candidates) {
-    try { await access(candidate, constants.X_OK); return candidate } catch {}
-  }
-  throw new Error('Chrome/Chromium is required for the real board proof; set CHROME_BIN to its executable.')
-}
 
 // Runs inside the parent page. Only the host boundary is a fixture: the iframe loads the
 // shipped HTML, CSS, modules, polling, SVG/canvas rendering, and event handlers unchanged.
@@ -174,7 +154,6 @@ async function exerciseTown() {
 }
 
 test('formal plaques render 3+4 and launch only workflows advertised by the host', { timeout: 45000 }, async t => {
-  const chrome = await chromeExecutable()
   const oldCatalog = process.env.OLD_TOWN_WORKFLOWS
     ? (await import(pathToFileURL(process.env.OLD_TOWN_WORKFLOWS).href)).workflows
     : workflows.filter(workflow => !formal.includes(workflow.id))
@@ -194,117 +173,56 @@ test('formal plaques render 3+4 and launch only workflows advertised by the host
       canvas: { path: '/fixture/b.mmd', at: 2 } },
     { sessionId: 'finished-old', title: 'Old host', workflow: formal[0], stage: 'handoff', status: 'finished', finishedAt: 1 },
   ].map(session => ({ skipped: [], subagentCount: 0, ...session }))
-  const assets = new Map(await Promise.all(['index.html', 'town.js', 'town.css', 'art.js', 'live-data.js', 'navigation.js'].map(async file =>
-    [file, await readFile(new URL(`../board/${file}`, import.meta.url))])))
-  const result = Promise.withResolvers()
-  const requests = []
-  const server = createServer(async (request, response) => {
-    try {
-      const path = new URL(request.url, 'http://localhost').pathname
-      requests.push(`${request.method} ${path}`)
-      response.setHeader('Cache-Control', 'no-store')
-      if (path === '/result' && request.method === 'POST') {
-        let body = ''
-        for await (const chunk of request) body += chunk
-        result.resolve(JSON.parse(body))
-        response.end('ok')
-      } else if (path === '/') {
-        response.setHeader('Content-Type', 'text/html; charset=utf-8')
-        response.end(`<!doctype html><meta charset="utf-8"><title>Formal board proof</title><style>body{margin:0}iframe{width:1200px;height:900px;border:0}</style><iframe id="board"></iframe><script type="module">(${exerciseTown.toString()})()</script>`)
-      } else {
-        const [, mode, kind, file] = path.split('/')
-        if (fixtures.has(mode) && kind === 'board') {
-          response.setHeader('Content-Type', 'application/json')
-          response.end(JSON.stringify(fixtures.get(mode)))
-        } else if (fixtures.has(mode) && kind === 'town' && assets.has(file)) {
-          response.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html; charset=utf-8')
-          response.end(assets.get(file))
-        } else { response.writeHead(404); response.end() }
-      }
-    } catch (error) { response.writeHead(500); response.end(String(error)); result.reject(error) }
-  })
-  const profile = await mkdtemp(join(tmpdir(), 'formal-board-chrome-'))
-  let child, closed, deadline, stderr = ''
-  try {
-    server.listen(0, '127.0.0.1')
-    await once(server, 'listening')
-    const url = `http://127.0.0.1:${server.address().port}/`
-    child = spawn(chrome, [
-      '--headless', '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
-      '--disable-component-update', '--disable-default-apps', '--disable-extensions', '--disable-sync',
-      '--no-proxy-server', '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1',
-      '--force-prefers-reduced-motion', '--window-size=1280,1000', `--user-data-dir=${profile}`, url,
-    ], { stdio: ['ignore', 'ignore', 'pipe'] })
-    child.stderr.setEncoding('utf8')
-    child.stderr.on('data', text => { stderr = (stderr + text).slice(-16000) })
-    closed = new Promise(resolve => child.once('close', (code, signal) => {
-      result.reject(new Error(`Chrome exited before proof completion (${code ?? signal})\n${stderr}`))
-      resolve()
-    }))
-    child.once('error', error => result.reject(error))
-    deadline = setTimeout(() => result.reject(new Error(`Board proof timed out\n${stderr}`)), 30000)
-    const evidence = await result.promise
-    assert.equal(evidence.error, undefined, evidence.error)
-    assert.deepEqual(evidence.errors, [])
-    assert.deepEqual(evidence.fileOpens, Array.from({ length: 2 }, () => [
-      { type: 'pixel-town-pstack/open-file', sessionId: 'finished-a', path: '/fixture/a.mmd' },
-      { type: 'pixel-town-pstack/open-file', sessionId: 'finished-b', path: '/fixture/b.mmd' },
-    ]).flat())
-    assert.equal(evidence.allPlaques.length, 18)
-    assert.ok(!evidence.allPlaques.includes('statechart') && !evidence.allPlaques.includes('pstack-statechart'))
-    for (const layout of [evidence.oldLayout, evidence.newLayout]) {
-      assert.equal(layout.length, 7)
-      const rows = [...new Set(layout.map(station => station.y))].sort((a, b) => a - b)
-      assert.equal(rows.length, 2)
-      assert.deepEqual(rows.map(y => layout.filter(station => station.y === y).length), [3, 4])
-      assert.deepEqual(layout.map(station => station.id), [
-        'interrogate', 'blast-radius', 'eval', 'create-verification-skill', 'maintain-verification-skill', ...formal,
-      ])
-      for (const station of layout) {
-        assert.ok(station.width > 0 && station.height > 0)
-        assert.ok(station.x >= 284 && station.x + station.width <= 460, `${station.id} inside detective room horizontally`)
-        assert.ok(station.y >= 12 && station.y + station.height <= 124, `${station.id} inside detective room vertically`)
-      }
-      for (const y of rows) {
-        const row = layout.filter(station => station.y === y).sort((a, b) => a.x - b.x)
-        for (let i = 1; i < row.length; i++) {
-          assert.ok(row[i - 1].x + row[i - 1].width <= row[i].x, 'station hit areas must not overlap')
-          assert.ok(row[i - 1].labelRight <= row[i].labelLeft, 'rendered plaque labels must not overlap')
-        }
-      }
-      assert.ok(rows[0] + Math.max(...layout.filter(station => station.y === rows[0]).map(station => station.height)) <= rows[1])
-      assert.deepEqual(layout.slice(-2).map(station => station.name), names)
+  const { evidence, requests } = await boardProof({ fixtures, exercise: exerciseTown, title: 'Formal board proof' })
+  assert.equal(evidence.error, undefined, evidence.error)
+  assert.deepEqual(evidence.errors, [])
+  assert.deepEqual(evidence.fileOpens, Array.from({ length: 2 }, () => [
+    { type: 'pixel-town-pstack/open-file', sessionId: 'finished-a', path: '/fixture/a.mmd' },
+    { type: 'pixel-town-pstack/open-file', sessionId: 'finished-b', path: '/fixture/b.mmd' },
+  ]).flat())
+  assert.equal(evidence.allPlaques.length, 18)
+  assert.ok(!evidence.allPlaques.includes('statechart') && !evidence.allPlaques.includes('pstack-statechart'))
+  for (const layout of [evidence.oldLayout, evidence.newLayout]) {
+    assert.equal(layout.length, 7)
+    const rows = [...new Set(layout.map(station => station.y))].sort((a, b) => a - b)
+    assert.equal(rows.length, 2)
+    assert.deepEqual(rows.map(y => layout.filter(station => station.y === y).length), [3, 4])
+    assert.deepEqual(layout.map(station => station.id), [
+      'interrogate', 'blast-radius', 'eval', 'create-verification-skill', 'maintain-verification-skill', ...formal,
+    ])
+    for (const station of layout) {
+      assert.ok(station.width > 0 && station.height > 0)
+      assert.ok(station.x >= 284 && station.x + station.width <= 460, `${station.id} inside detective room horizontally`)
+      assert.ok(station.y >= 12 && station.y + station.height <= 124, `${station.id} inside detective room vertically`)
     }
-    assert.deepEqual(evidence.oldControl, [{ type: 'pixel-town-pstack/start-session', skill: oldCatalog.find(workflow => workflow.id === 'interrogate').skill }])
-    assert.deepEqual(evidence.oldStarts, [], 'old host formal plaque clicks must not post start-session')
-    assert.deepEqual(evidence.old, formal.map((id, index) => ({
-      id, title: names[index], hint: '还没接入 DSH，暂时不能从这里开工。', hasStart: false, command: null,
-    })))
-    for (const [index, id] of formal.entries()) {
-      assert.equal(evidence.current[index].title, names[index])
-      assert.equal(evidence.current[index].hasStart, true)
-      assert.equal(evidence.current[index].command, `/pstack-${id}`)
-      assert.equal(evidence.advertised[index].command, `/host-advertised-${id}`)
-      assert.ok(evidence.help.includes(names[index]))
+    for (const y of rows) {
+      const row = layout.filter(station => station.y === y).sort((a, b) => a.x - b.x)
+      for (let i = 1; i < row.length; i++) {
+        assert.ok(row[i - 1].x + row[i - 1].width <= row[i].x, 'station hit areas must not overlap')
+        assert.ok(row[i - 1].labelRight <= row[i].labelLeft, 'rendered plaque labels must not overlap')
+      }
     }
-    assert.deepEqual(evidence.newStarts, formal.map(id => ({ type: 'pixel-town-pstack/start-session', skill: `pstack-${id}`, workspaceId: 'proof-workspace' })))
-    assert.deepEqual(evidence.advertisedStarts, formal.map(id => ({ type: 'pixel-town-pstack/start-session', skill: `host-advertised-${id}` })))
-    for (const mode of fixtures.keys()) assert.ok(requests.includes(`GET /${mode}/board`), `${mode} used real board polling`)
-    assert.deepEqual(requests.filter(request => !request.startsWith('GET ')), ['POST /result'])
-    t.diagnostic(JSON.stringify({ oldCatalog: process.env.OLD_TOWN_WORKFLOWS ?? 'current catalog minus formal workflows',
-      layout: evidence.newLayout.map(({ id, x, y, width, height }) => ({ id, x, y, width, height })),
-      oldHints: evidence.old.map(({ id, hint }) => ({ id, hint })), oldStartPosts: evidence.oldStarts.length,
-      oldControl: evidence.oldControl, newStarts: evidence.newStarts, advertisedStarts: evidence.advertisedStarts }))
-  } finally {
-    clearTimeout(deadline)
-    if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM')
-    if (closed) {
-      const force = setTimeout(() => child.kill('SIGKILL'), 3000)
-      await closed
-      clearTimeout(force)
-    }
-    server.closeAllConnections()
-    await new Promise(resolve => server.close(resolve))
-    await rm(profile, { recursive: true, force: true })
+    assert.ok(rows[0] + Math.max(...layout.filter(station => station.y === rows[0]).map(station => station.height)) <= rows[1])
+    assert.deepEqual(layout.slice(-2).map(station => station.name), names)
   }
+  assert.deepEqual(evidence.oldControl, [{ type: 'pixel-town-pstack/start-session', skill: oldCatalog.find(workflow => workflow.id === 'interrogate').skill }])
+  assert.deepEqual(evidence.oldStarts, [], 'old host formal plaque clicks must not post start-session')
+  assert.deepEqual(evidence.old, formal.map((id, index) => ({
+    id, title: names[index], hint: '还没接入 DSH，暂时不能从这里开工。', hasStart: false, command: null,
+  })))
+  for (const [index, id] of formal.entries()) {
+    assert.equal(evidence.current[index].title, names[index])
+    assert.equal(evidence.current[index].hasStart, true)
+    assert.equal(evidence.current[index].command, `/pstack-${id}`)
+    assert.equal(evidence.advertised[index].command, `/host-advertised-${id}`)
+    assert.ok(evidence.help.includes(names[index]))
+  }
+  assert.deepEqual(evidence.newStarts, formal.map(id => ({ type: 'pixel-town-pstack/start-session', skill: `pstack-${id}`, workspaceId: 'proof-workspace' })))
+  assert.deepEqual(evidence.advertisedStarts, formal.map(id => ({ type: 'pixel-town-pstack/start-session', skill: `host-advertised-${id}` })))
+  for (const mode of fixtures.keys()) assert.ok(requests.includes(`GET /${mode}/board`), `${mode} used real board polling`)
+  assert.deepEqual(requests.filter(request => !request.startsWith('GET ')), ['POST /result'])
+  t.diagnostic(JSON.stringify({ oldCatalog: process.env.OLD_TOWN_WORKFLOWS ?? 'current catalog minus formal workflows',
+    layout: evidence.newLayout.map(({ id, x, y, width, height }) => ({ id, x, y, width, height })),
+    oldHints: evidence.old.map(({ id, hint }) => ({ id, hint })), oldStartPosts: evidence.oldStarts.length,
+    oldControl: evidence.oldControl, newStarts: evidence.newStarts, advertisedStarts: evidence.advertisedStarts }))
 })
