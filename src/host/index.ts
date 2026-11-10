@@ -42,7 +42,7 @@ function sessionRecords(session: Session) {
   return [{ ...session.header, type: 'session' }, ...session.snapshotEvents()]
 }
 
-function parseSkill(raw: string, path: string): { description: string; content: string; workflow?: string } {
+function parseSkill(raw: string, path: string): { description: string; modelInvocable: boolean; content: string; workflow?: string } {
   const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(raw)
   if (!frontmatter) throw new Error(`pixel-town-pstack: ${path} has no YAML frontmatter`)
   const metadata: unknown = parseYaml(frontmatter[1]!)
@@ -50,18 +50,22 @@ function parseSkill(raw: string, path: string): { description: string; content: 
     || typeof metadata.description !== 'string' || !metadata.description.trim()) {
     throw new Error(`pixel-town-pstack: ${path} has no description`)
   }
+  // DSH's own convention: a user-only skill answers /name but stays out of the model's catalog and skill tool.
+  const userOnly = 'disable-model-invocation' in metadata ? metadata['disable-model-invocation'] : false
+  if (typeof userOnly !== 'boolean') throw new Error(`pixel-town-pstack: ${path} has invalid disable-model-invocation`)
   const attributes = 'metadata' in metadata && typeof metadata.metadata === 'object' && metadata.metadata !== null
     ? metadata.metadata : null
   const workflow = attributes && 'workflow' in attributes ? attributes.workflow : undefined
   if (workflow !== undefined && typeof workflow !== 'string') throw new Error(`pixel-town-pstack: ${path} has invalid metadata.workflow`)
+  const skill = { description: metadata.description, modelInvocable: !userOnly }
   const content = raw.slice(frontmatter[0].length).trim()
-  if (workflow === undefined) return { description: metadata.description, content }
+  if (workflow === undefined) return { ...skill, content }
   // skills/ is read live while the registry is in the running host's memory, so a newer skill can
   // name a workflow this host predates. Serve that one skill plainly instead of failing the catalog.
   if (!workflows.some(known => known.id === workflow)) {
-    return { description: metadata.description, content: `${content}\n\n> 当前宿主不认识工作流 \`${workflow}\`，按正文执行，不调用 pstack_stage；重启 DSH 加载新版小镇后才有阶段协议。` }
+    return { ...skill, content: `${content}\n\n> 当前宿主不认识工作流 \`${workflow}\`，按正文执行，不调用 pstack_stage；重启 DSH 加载新版小镇后才有阶段协议。` }
   }
-  return { description: metadata.description, content: `${content}\n\n${stageProtocol(workflow)}`, workflow }
+  return { ...skill, content: `${content}\n\n${stageProtocol(workflow)}`, workflow }
 }
 
 export function apply(ctx: HostContext, config: Config): void {
@@ -371,9 +375,9 @@ export function apply(ctx: HostContext, config: Config): void {
           if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
           throw error
         }
-        const { description } = parseSkill(raw, path)
+        const { description, modelInvocable } = parseSkill(raw, path)
         candidates.push({
-          name: entry.name, description, invocation: { modelInvocable: true, userInvocable: true },
+          name: entry.name, description, invocation: { modelInvocable, userInvocable: true },
           provider: 'pixel-town-pstack', source: 'bundled', rank: 600,
           resourceBase: { kind: 'directory', path: directory }, locator: path, path,
         })
@@ -383,7 +387,7 @@ export function apply(ctx: HostContext, config: Config): void {
     async get(candidate, { signal }) {
       const { rank: _rank, locator, ...summary } = candidate
       const raw = await readFile(locator, { encoding: 'utf8', signal })
-      const { workflow, ...skill } = parseSkill(raw, locator)
+      const { workflow, modelInvocable: _modelInvocable, ...skill } = parseSkill(raw, locator)
       const models = workflow === undefined ? undefined : await modelState(ctx, config.root)
       const block = workflow === undefined || !models ? '' : modelRoleBlock(workflow, models.assignments, models.selection)
       const statechart = candidate.name === 'pstack-statechart' ? [

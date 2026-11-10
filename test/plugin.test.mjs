@@ -1016,6 +1016,24 @@ test('a skill naming an unknown workflow is listed and served without a stage pr
   assert.ok((await h.provider.get(candidates.find(candidate => candidate.name === 'pstack-bug-fix'), {})).content.includes(stageProtocol('bug-fix')))
 })
 
+test('disable-model-invocation makes a town skill user-only and leaves the rest model-invocable', async () => {
+  const skillsRoot = await mkdtemp(join(dataRoot, 'user-only-skills-'))
+  await cp(new URL('../skills/pstack-opening-a-pr', import.meta.url), join(skillsRoot, 'pstack-opening-a-pr'), { recursive: true })
+  await cp(new URL('../skills/pstack-opening-a-pr', import.meta.url), join(skillsRoot, 'pstack-entry'), { recursive: true })
+  const entry = join(skillsRoot, 'pstack-entry', 'SKILL.md')
+  await writeFile(entry, (await readFile(entry, 'utf8')).replace('---\n\n', 'disable-model-invocation: true\n---\n\n'))
+  const h = host({ config: { skillsRoot } })
+  const candidates = await h.provider.list({})
+  assert.deepEqual(candidates.map(({ name, invocation }) => ({ name, invocation })), [
+    { name: 'pstack-entry', invocation: { modelInvocable: false, userInvocable: true } },
+    { name: 'pstack-opening-a-pr', invocation: { modelInvocable: true, userInvocable: true } },
+  ])
+  const loaded = await h.provider.get(candidates[0], {})
+  assert.deepEqual(loaded.invocation, { modelInvocable: false, userInvocable: true })
+  assert.equal(Object.hasOwn(loaded, 'modelInvocable'), false)
+  assert.match(loaded.content, /# Opening a PR\/MR/u)
+})
+
 test('wave-two manifests expose every fixed stage and optional path', () => {
   const expected = [
     ['prototype', '出原型', ['decide', 'references', 'build', 'observe', 'present'], ['references']],
