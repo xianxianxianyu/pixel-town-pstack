@@ -81,9 +81,13 @@ export interface SkillCandidate {
 interface UserMessage {
   readonly id: string
   readonly role: 'user'
-  readonly source: { readonly kind: 'user' }
-  readonly content: readonly { readonly type: 'text'; readonly text: string }[]
+  readonly source: { readonly kind: string; readonly name?: string; readonly form?: string }
+  readonly content: readonly ContentBlock[]
 }
+
+type PreStepDecision =
+  | { readonly kind: 'enter'; readonly messages: readonly UserMessage[] }
+  | { readonly kind: 'reject' }
 
 interface Commands {
   register(definition: {
@@ -119,6 +123,10 @@ export interface HostContext {
     result: { readonly content: readonly ContentBlock[]; readonly isError: boolean },
     next: () => Promise<PostToolDecision>,
   ) => Promise<PostToolDecision>, options?: { readonly prepend: boolean }): () => void
+  on(event: 'agent/pre-step', listener: (
+    input: { readonly agent: { readonly session: Session }; readonly messages: readonly UserMessage[]; readonly signal: AbortSignal },
+    next: () => Promise<PreStepDecision>,
+  ) => Promise<PreStepDecision>, options?: { readonly prepend: boolean }): () => void
   readonly sessions: { list(): Session[] }
   readonly skills: {
     registerProvider(factory: () => {

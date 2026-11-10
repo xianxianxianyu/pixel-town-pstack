@@ -45,6 +45,8 @@ Click a plaque, select a workspace, and choose **新开会话** (new session). D
 
 Not sure which plaque fits? Type **`/pstack-poteto-mode <goal>`**, or click **说目标** under the 入镇 stone at the west entrance for the same unsent draft. Poteto mode restates your goal, routes it to the matching workflow skill under poteto's rules, and loads it, so the resident appears at that plaque. Large, cross-cutting, step-away, or unmatched goals go to **想办法** (`/pstack-figure-it-out`). Upstream playbooks the town does not port (babysit, shipping, autopilot, orchestrate, worktree cleanup) are said so plainly and handled without a stage protocol. The entry is user-only (`disable-model-invocation: true`): the model catalog and `skill` tool never list it. The 24 upstream principle leaves ship verbatim under `skills/pstack-poteto-mode/references/principles/`, and the provider injects their absolute directory into poteto mode and figure-it-out. Older hosts show no 说目标 button.
 
+The host repeats a short mode reminder on each later user message in that session, including `continue` and `new task`. The full skill stays in the conversation. Routing and reply discipline still depend on the model; the reminder is not a compliance gate.
+
 All **18 plaques** are runnable after restarting the updated host. The construction site has six plaques in a **3+3** layout, the detective agency seven in a **3+4** layout, and the clinic five. Buildings are categories, not sequential workflow stages; the park is a quiet corner, not another workflow. An older host shows the new plaques but explains that they are not connected, without offering to start an unavailable workflow.
 
 | Building | Plaque | Command | Use it for |

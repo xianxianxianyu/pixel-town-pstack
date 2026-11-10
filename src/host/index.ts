@@ -68,11 +68,42 @@ function parseSkill(raw: string, path: string): { description: string; modelInvo
   return { ...skill, content: `${content}\n\n${stageProtocol(workflow)}`, workflow }
 }
 
+function isPotetoInvocation(message: unknown): boolean {
+  if (typeof message !== 'object' || message === null || !('source' in message)) return false
+  const source = message.source
+  return typeof source === 'object' && source !== null
+    && 'kind' in source && source.kind === 'skill-invocation'
+    && 'name' in source && source.name === ENTRY_SKILL
+    && 'form' in source && source.form === 'instructions'
+}
+
 export function apply(ctx: HostContext, config: Config): void {
   if (typeof config?.root !== 'string' || !isAbsolute(config.root)) throw new Error('pixel-town-pstack: root must be an absolute directory')
   const skillsRoot = config.skillsRoot ?? fileURLToPath(new URL('../skills/', import.meta.url))
   if (typeof skillsRoot !== 'string' || !isAbsolute(skillsRoot)) throw new Error('pixel-town-pstack: skillsRoot must be an absolute directory')
   const cap = outputCapTokens(config.outputCapTokens)
+
+  ctx.on('agent/pre-step', async ({ agent, messages, signal }, next) => {
+    const decision = await next()
+    if (decision.kind === 'reject' || !messages.some(message => message.source.kind === 'user')) return decision
+    const active = decision.messages.some(isPotetoInvocation)
+      || agent.session.snapshotEvents().some(event => event.type === 'user/message' && isPotetoInvocation(event.data))
+    if (!active) return decision
+    signal.throwIfAborted()
+    return {
+      ...decision,
+      messages: [...decision.messages, {
+        id: randomUUID(), role: 'user', source: { kind: 'poteto-mode-reminder' },
+        content: [{ type: 'text', text: [
+          `本会话仍按 /${ENTRY_SKILL} 执行。完整规则在 ${join(skillsRoot, ENTRY_SKILL, 'SKILL.md')}。`,
+          '新任务的任何工具调用前，先用普通回复向用户复述目标、要解决的问题和最小改动。不要只写在思考里。',
+          '按技能的路由表加载工作流。new task 要重新匹配；continue 继续当前步骤。跨文件迁移或大目标走 pstack-figure-it-out，先呈现框架与检查点。',
+          `读取实际应用的原则叶文件，目录为 ${join(skillsRoot, ENTRY_SKILL, 'references', 'principles')}。回复中点名原则及它改变的决定，只引用本会话读过的叶文件。`,
+          '用中文短句回复，保留证据，不用长破折号或句中连接冒号。',
+        ].join('\n') }],
+      }],
+    }
+  }, { prepend: true })
 
   ctx.on('tools/post-execute', async (exec, result, next) => {
     const decision = await next()

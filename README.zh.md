@@ -45,6 +45,8 @@ dsh plugin --profile <profile> add link:"$(pwd)"
 
 不知道该点哪块木牌时，输入 **`/pstack-poteto-mode <目标>`**，或点西边「入镇」石下的**说目标**，得到同样的未发送草稿。poteto 模式先复述目标，再按 poteto 的规矩匹配并加载对应的工作流技能，居民随之出现在那块木牌前。大活、跨很多地方、放手离开或没有合适木牌的目标走**想办法**（`/pstack-figure-it-out`）。小镇没有移植的上游 playbook（babysit、shipping、autopilot、orchestrate、worktree cleanup）会直接说明，不套阶段协议。入口只供用户调用（`disable-model-invocation: true`），模型的技能目录和 `skill` 工具都看不到它。上游 24 条原则原样放在 `skills/pstack-poteto-mode/references/principles/`，提供器把它们的绝对目录注入 poteto 模式和「想办法」。旧宿主不显示说目标按钮。
 
+同一会话后续每条用户消息，包括 `continue` 和 `new task`，宿主都会补一条简短的模式提醒。完整技能仍在对话中。路由和回复规矩仍取决于模型，提醒不是强制合规检查。
+
 更新并重启宿主后，全部 **18 块木牌**都可以启动。工地有六块，采用 **3+3** 排列；侦探社七块，采用 **3+4** 排列；急诊站五块。建筑是工作分类，不是工作流程中的先后阶段；公园是休息角落，不是另一条流程。旧宿主仍会显示新木牌，但点击后会说明尚未接入，不会提供不可用流程的开工按钮。
 
 | 建筑 | 木牌 | 命令 | 适用任务 |

@@ -37,7 +37,7 @@ function log() {
 
 function host({ connection = false, webServer = false, commands = false, spillStore, subagentModelSelection, llm, config = {} } = {}) {
   const journal = log()
-  let route, provider, postExecute, command
+  let route, provider, postExecute, preStep, command
   const tools = new Map()
   const webRoutes = new Map()
   const routes = new Map()
@@ -55,6 +55,7 @@ function host({ connection = false, webServer = false, commands = false, spillSt
     get(name) { return { spillStore, subagentModelSelection, llm }[name] },
     logger: { warn() {} },
     on(name, listener, options) {
+      if (name === 'agent/pre-step') { assert.deepEqual(options, { prepend: true }); preStep = listener; return }
       assert.equal(name, 'tools/post-execute')
       assert.deepEqual(options, { prepend: true })
       postExecute = listener
@@ -89,6 +90,9 @@ function host({ connection = false, webServer = false, commands = false, spillSt
     get webRoutes() { return [...webRoutes.values()] },
     get sessionReads() { return sessionReads },
     dispose() { for (const dispose of disposers.splice(0).reverse()) dispose() },
+    async prepare(messages, decision = { kind: 'enter', messages }) {
+      return preStep ? preStep({ agent: { session }, messages, signal: new AbortController().signal }, async () => decision) : decision
+    },
     async output(name, args, text, { agent = { session }, decision = { kind: 'accept' }, isError = false, content = [{ type: 'text', text }] } = {}) {
       const id = `output-${++calls}`
       journal.call(id, name, args)
@@ -1046,6 +1050,38 @@ const upstreamPlaybooks = [
 const section = (text, heading) => text.split(`\n## ${heading}\n`)[1].split('\n## ')[0]
 const tableRows = text => text.split('\n').filter(line => line.startsWith('| ') && !line.startsWith('|---'))
   .slice(1).map(line => line.slice(2, -2).split(' | '))
+
+test('poteto mode reminds later user turns from the durable invocation, without leaking to other sessions or tool steps', async () => {
+  const h = host()
+  const user = { id: 'followup', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'new task. Fix the ordering bug.' }] }
+  const initial = { ...user, source: { kind: 'skill-invocation', name: 'pstack-poteto-mode', form: 'instructions' } }
+  const first = await h.prepare([user], { kind: 'enter', messages: [user, initial] })
+  assert.equal(first.messages.length, 3, 'the initial invocation gets the same checklist after skill expansion')
+  assert.equal(first.messages[1], initial)
+  assert.deepEqual((await h.prepare([user])).messages, [user])
+  h.journal.append('user/message', { ...user, content: [{ type: 'text', text: 'The docs mention /pstack-poteto-mode.' }] })
+  assert.deepEqual((await h.prepare([user])).messages, [user], 'a mention does not activate the mode')
+  h.journal.append('user/message', { ...user, source: { kind: 'skill-invocation', name: 'pstack-poteto-mode', form: 'instructions' } })
+  for (const text of ['new task. Fix the ordering bug.', 'continue']) {
+    const message = { ...user, content: [{ type: 'text', text }] }
+    const result = await h.prepare([message])
+    assert.equal(result.messages.length, 2)
+    assert.equal(result.messages[0], message)
+    const reminder = result.messages[1]
+    assert.equal(reminder.role, 'user')
+    assert.equal(reminder.source.kind, 'poteto-mode-reminder')
+    assert.match(reminder.content[0].text, /SKILL\.md/u)
+    assert.match(reminder.content[0].text, /普通回复/u)
+    assert.match(reminder.content[0].text, /new task/u)
+    assert.match(reminder.content[0].text, /原则叶文件/u)
+  }
+  assert.deepEqual((await h.prepare([])).messages, [], 'tool-only steps do not accumulate reminders')
+  const wake = { ...user, source: { kind: 'subagent' } }
+  assert.deepEqual((await h.prepare([wake])).messages, [wake])
+  const rejected = { kind: 'reject', reason: 'stop' }
+  assert.equal(await h.prepare([user], rejected), rejected)
+  assert.deepEqual((await host().prepare([user])).messages, [user], 'another session is not in the mode')
+})
 
 test('poteto mode is user-only and routes all 23 upstream playbooks to loadable town skills or an honest not-ported line', async () => {
   const raw = await readFile(new URL('../skills/pstack-poteto-mode/SKILL.md', import.meta.url), 'utf8')

@@ -173,4 +173,4 @@ The town also runs workflows that upstream reaches through skills. Route to them
 
 **New task.** "new task" tells you to re-match rather than continue the prior workflow. Load the newly matched workflow skill even when another is active. Its first `pstack_stage` call moves the resident. "don't change any code yet" pins the request to Investigation. Without "new task", a request mid-workflow continues that workflow.
 
-**Follow up short.** "do it", "continue" and "keep going until done" are enough when the conversation already carries the context. Continue the active workflow from its current step. This skill stays in the conversation after `/pstack-poteto-mode`, so its rules hold on every later turn.
+**Follow up short.** "do it", "continue" and "keep going until done" are enough when the conversation already carries the context. Continue the active workflow from its current step. This skill stays in the conversation after `/pstack-poteto-mode`, so its rules hold on every later turn. The town host adds a short reminder on each direct user input, including the first invocation, without adding one on tool-only steps.
