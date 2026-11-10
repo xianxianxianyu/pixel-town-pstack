@@ -35,13 +35,17 @@ dsh plugin --profile <profile> add link:"$(pwd)"
 
 Restart DSH, then open **Pixel Town / 像素小镇** in the left sidebar. The panel uses DSH's existing authentication on the same origin; it needs no separate token URL. Keep the linked checkout in place. After updating it, install dependencies and rebuild, then restart DSH to refresh the host, tools, skill catalog, and client bridge.
 
-For this formal-skills update, **quit DSH before updating a live linked checkout**, rebuild that checkout's `lib/`, then restart only after the build succeeds. An old host reads new skill files on catalog cache misses and cannot parse the new workflow IDs; merely updating files or restarting without rebuilding can hide the town's entire skill catalog. The board's unavailable-plaque hint protects clicks, not this skill-provider compatibility boundary.
+For this update (poteto mode and the figure-it-out workflow), **quit DSH before updating a live linked checkout**, rebuild that checkout's `lib/`, then restart only after the build succeeds. A host built before this release reads new skill files on catalog cache misses and cannot parse the new `figure-it-out` workflow ID; merely updating files or restarting without rebuilding can hide the town's entire skill catalog. The board's unavailable-plaque hint protects clicks, not this skill-provider compatibility boundary.
+
+From this release on, the skill provider **tolerates unknown `metadata.workflow` IDs**: such a skill stays in the catalog and is served without a stage protocol, with a one-line note asking for a restart. A future workflow added to a live checkout therefore degrades one skill instead of the whole catalog. It cannot protect hosts built before this release.
 
 ## Choose a playbook
 
 Click a plaque, select a workspace, and choose **新开会话** (new session). DSH opens a new or blank conversation and inserts an **unsent** slash-command draft; add your task and send it yourself. An existing draft is preserved. You can also paste any command below directly into a DSH conversation.
 
-All **17 plaques** are runnable after restarting the updated host. The detective agency has seven plaques in a **3+4** layout; the other two buildings have five each. Buildings are categories, not sequential workflow stages; the park is a quiet corner, not another workflow. An older host shows the new plaques but explains that they are not connected, without offering to start an unavailable workflow.
+Not sure which plaque fits? Type **`/pstack-poteto-mode <goal>`**, or click **说目标** under the 入镇 stone at the west entrance for the same unsent draft. Poteto mode restates your goal, routes it to the matching workflow skill under poteto's rules, and loads it, so the resident appears at that plaque. Large, cross-cutting, step-away, or unmatched goals go to **想办法** (`/pstack-figure-it-out`). Upstream playbooks the town does not port (babysit, shipping, autopilot, orchestrate, worktree cleanup) are said so plainly and handled without a stage protocol. The entry is user-only (`disable-model-invocation: true`): the model catalog and `skill` tool never list it. The 24 upstream principle leaves ship verbatim under `skills/pstack-poteto-mode/references/principles/`, and the provider injects their absolute directory into poteto mode and figure-it-out. Older hosts show no 说目标 button.
+
+All **18 plaques** are runnable after restarting the updated host. The construction site has six plaques in a **3+3** layout, the detective agency seven in a **3+4** layout, and the clinic five. Buildings are categories, not sequential workflow stages; the park is a quiet corner, not another workflow. An older host shows the new plaques but explains that they are not connected, without offering to start an unavailable workflow.
 
 | Building | Plaque | Command | Use it for |
 | --- | --- | --- | --- |
@@ -50,6 +54,7 @@ All **17 plaques** are runnable after restarting the updated host. The detective
 | 工地 · Construction site | 分期计划 | `/pstack-multi-phase-plan` | Write an evidence-bearing phased plan; implement only after an explicit go. |
 | 工地 · Construction site | 实现功能 | `/pstack-feature` | Design, implement, and verify a requested feature. |
 | 工地 · Construction site | 重构 | `/pstack-refactoring` | Simplify structure while proving behavior stays the same. |
+| 工地 · Construction site | 想办法 | `/pstack-figure-it-out` | Design a bespoke, auditable playbook for large or unmatched work; keeps a work log. |
 | 侦探社 · Detective agency | 代码审查 | `/pstack-interrogate` | Attack a diff in isolated worktrees and report reproduced bugs without fixing them. |
 | 侦探社 · Detective agency | 爆炸半径 | `/pstack-blast-radius` | Investigate downstream risks and test the assumptions behind a change. |
 | 侦探社 · Detective agency | eval | `/pstack-eval` | Compare controlled candidates, judge anonymous outputs, and audit actual artifacts. |
