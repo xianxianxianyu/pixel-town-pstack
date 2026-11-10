@@ -66,7 +66,7 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
   const GATE_LANTERN = { x: 441, y: 201 }; // hangs under the west eave, lit after dark
   const GATE_BUTTON = { x: 434, y: 188, w: 34, h: 30 }; // its 开 PR / MR plate sits on the roof, inside the east edge
   const MILESTONE = { x: 13, y: 191, w: 14, h: 15 };
-  const ENTRY_BUTTON = { x: 6, y: 188, w: 28, h: 29 }; // the stone plus its 说目标 plate underneath
+  const WISH_BUTTON = { x: FOUNTAIN.x - 32, y: FOUNTAIN.y - 28, w: 64, h: 46 }; // the fountain is the 许愿池: spout tip to front wall
   // Save points stand on the outer side of each door; queues fill both sides and never reach a road.
   const SAVE_POINTS = {
     construction: { name: '打卡钟', prop: 'punchClock', x: WEST - 24, y: QUEUE_Y.north + 6, queueY: QUEUE_Y.north, sides: [[WEST + 18, 178], [14, WEST - 40]] },
@@ -93,6 +93,11 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
   let buildingSignature = '';
   let panelContent = '';
   const embedded = window.parent !== window && new URLSearchParams(location.search).get('embed') === '1';
+  // First-time tips: each points at its landmark until that kind of panel has been opened once in this browser.
+  const TIPS_KEY = 'pixel-town-pstack/tips-seen';
+  const tipsSeen = new Set((() => {
+    try { const seen = JSON.parse(localStorage.getItem(TIPS_KEY)); return Array.isArray(seen) ? seen : []; } catch { return []; }
+  })());
   let workspaceState = embedded ? 'loading' : 'standalone';
   let workspaces = [];
   let selectedWorkspace = '';
@@ -703,7 +708,7 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     canvas.width = WORLD.w;
     canvas.height = WORLD.h;
   }
-  for (const [id, point, inset] of [['map-mailbox', MAILBOX, 4], ['map-notice', NOTICE, 2], ['map-gate', GATE_BUTTON, 0], ['map-entry', ENTRY_BUTTON, 0]]) {
+  for (const [id, point, inset] of [['map-mailbox', MAILBOX, 4], ['map-notice', NOTICE, 2], ['map-gate', GATE_BUTTON, 0], ['map-entry', WISH_BUTTON, 0]]) {
     const button = $(id);
     button.style.left = `${point.x - inset}px`;
     button.style.top = `${point.y - inset}px`;
@@ -843,11 +848,11 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     <p>建筑是一类工作，木牌是一份 pstack 工作流，小人是 DSH 会话。</p>
     <p>小镇固定为 472 × 360 像素，缩放和调整窗口时会完整放进木框，不会裁切。小窗口下名牌只显示编号和状态；点击后仍可在原字号面板中查看完整信息。</p>
     <ul class="help-list">
+      <li>不知道从哪开始，就点广场中央的许愿池：选工作区、新开会话，DSH 会填好 /pstack-poteto-mode，在后面直接写你想做什么再发送。居民先复述目标，再按 poteto 的规矩挑合适的木牌开工，大活或没有合适木牌时去「想办法」。镇上没有居民时，许愿池会冒气泡提醒；旧主机的许愿池不能点。镇上有了居民、收件箱来了信，也各冒一个气泡指给你看；点开过一次居民卡或收件箱，对应的气泡就不再出现。</li>
       <li>点木牌，了解它适合做什么、查看居民。主机提供对应工作流时，可以选工作区、新开会话并填好命令，补上任务描述后再发送；旧主机未接入的木牌会明确提示。</li>
       <li>工地后排是分析需求、出原型、分期计划，前排是实现功能、重构、想办法；侦探社后排是代码审查、爆炸半径、eval，前排是验证工具、验证巡检、形式化验证、形式化巡检；灭虫急诊站有现场取证、分析抓包、修 bug、性能问题、持续调优。居民站在对应木牌旁；未匹配的工作流列在告示牌的「其他会话」。想办法给大活或没有合适木牌的活设计专属流程并记工作日志；形式化验证建立可重跑的性质检查，形式化巡检让检查跟上代码变化；共享的状态图工具没有单独木牌。</li>
       <li>小镇是一条流水线：新会话的小人从左边的「入镇」石沿大路走进来，到自己的木牌前干活；完工后从右边出镇。开了 PR（GitHub）或 MR（GitLab）、或只留了本地提交的小人带着信封，在右口的「开 PR / MR」关口停一下再走；只读的任务直接离开。打开页面时不会重放：已在镇上的直接就位，已完工的只出现在「最近离开」里。</li>
       <li>点「开 PR / MR」关口也能开工：选工作区、新开会话并填好 /pstack-opening-a-pr，补一句要整理和交付的改动（分支或路径）再发送；它把改动整理成提交并开 PR / MR。旧主机没有提供这项时只给出可复制的命令。</li>
-      <li>不知道该点哪块木牌时，点左边「入镇」石下的「说目标」：选工作区、新开会话并填好 /pstack-poteto-mode，在后面写上目标再发送。居民先复述目标，再按 poteto 的规矩挑合适的木牌开工，大活或没有合适木牌时去「想办法」。旧主机不显示这个按钮。</li>
       <li>想让一个会话自己跑到目标达成，在 DSH 输入框里用 <code>/goal &lt;目标&gt;</code>：DSH 会一轮轮接着做，直到目标完成、受阻或用完轮次；小镇只负责显示，不替你开始或停止。目标进行中的小人右肩挂一面小红旗（目标），记着工作日志的挂一本账本（记录中）；两枚徽章静止地排在头侧状态图标下方。居民卡的「自主运行」写着目标、进行中 / 已暂停 / 受阻 / 已完成、第几轮 / 共几轮和受阻原因。</li>
       <li>每栋楼门边都有存档点：工地打卡钟、侦探社卷宗柜、急诊站病历架。已存档的小人坐下等你（⏸）；待回答的小人站着举牌，有存档时加软盘徽章。断了没存档的小人留在木牌旁，变灰并标 ⚡。</li>
       <li>存档只写仓库外的续接笔记，不提交、不 stash、不修改代码。点存档点查看等候居民、等你什么、时间和可复制的笔记路径；也可以用 /pstack-pause 主动存档停下。</li>
@@ -855,7 +860,7 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
       <li>记了工作日志的会话，居民卡会列出每个决定、结果和证据；改错的行划掉并指向更正它的行。点 call 证据可以在卡片里查看那次调用的参数和输出；卡片底部是核对发现和交叉审查（reviewed by 哪个模型，标记或 No flags）。</li>
       <li>收件箱分组显示待回答的问题与只读选项、需要你注意（这轮结束后仍有核对问题或审查标记，或自主运行受阻）、存档等你和断了要处理的会话。「去回答」「去看看」只打开对应会话，不代答或唤醒。</li>
       <li>告示牌显示概况、设置、镇上的居民列表和「最近离开」：最近 20 个完工的会话，标出 PR、MR、本地提交或完成，有链接时可在新标签页打开 PR/MR。点关口也能看到同一份名单。「设置 → 模型分工」可以给干活的子 agent、审查方、eval 候选和评审分配 DSH 中启用的模型，留空使用默认；保存后新会话生效。主模型仍由你在 DSH 输入框为会话选择，插件不改。</li>
-      <li>Tab 选中木牌、小人、存档点、收件箱、关口、说目标和告示牌，Enter 打开；Esc、点外面或关闭按钮收起面板。Esc 把焦点还给打开它的地图对象。笔记路径可点击全选，或用键盘选中复制。</li>
+      <li>Tab 选中木牌、小人、存档点、收件箱、关口、许愿池和告示牌，Enter 打开；Esc、点外面或关闭按钮收起面板。Esc 把焦点还给打开它的地图对象。笔记路径可点击全选，或用键盘选中复制。</li>
       <li>独立页面会在新标签页打开 DSH，并用同源本地存储恢复会话选择。天色跟随本机时间；安静模式和系统「减少动态效果」关闭循环动作和行走，进出镇改为直接出现和消失。</li>
     </ul>
     <h3>致谢</h3>
@@ -932,11 +937,19 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     el.setAttribute('aria-controls', 'town-popover');
     el.setAttribute('aria-expanded', 'false');
     el.dataset.session = s.id;
-    el.innerHTML = `<rect class="resident-anchor" x="-9" y="-25" width="18" height="26"/><path class="selection" d="M-10 -22v-4h4M6 -26h4v4M10 -2v4h-4M-6 2h-4v-4"/><g class="nameplate"><rect class="nameplate-edge" y="1" height="9"/><rect class="nameplate-bg" y="2" height="7"/><rect class="nameplate-dot" y="4" width="3" height="3"/><text class="nameplate-text" y="8"><tspan class="nameplate-number"></tspan><tspan class="nameplate-glyph" dx="1.5"></tspan><tspan class="nameplate-title" dx="1.5"></tspan></text><text class="nameplate-compact" x="0" y="8"></text></g><g class="event-bubble"><path class="bubble-bg"/><text y="-30"></text></g>`;
+    el.innerHTML = `<rect class="resident-anchor" x="-9" y="-25" width="18" height="26"/><path class="selection" d="M-10 -22v-4h4M6 -26h4v4M10 -2v4h-4M-6 2h-4v-4"/><g class="nameplate"><rect class="nameplate-edge" y="1" height="9"/><rect class="nameplate-bg" y="2" height="7"/><rect class="nameplate-dot" y="4" width="3" height="3"/><text class="nameplate-text" y="8"><tspan class="nameplate-number"></tspan><tspan class="nameplate-glyph" dx="1.5"></tspan><tspan class="nameplate-title" dx="1.5"></tspan></text><text class="nameplate-compact" x="0" y="8"></text></g><g class="event-bubble"><path class="bubble-bg"/><text y="-30"></text></g><g class="tip-bubble"><path class="bubble-bg"/><text y="-30">点我看进度</text></g>`;
     el.addEventListener('click', () => openPanel({ kind: 'resident', id: s.id }));
     el.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPanel({ kind: 'resident', id: s.id }); } });
     $('residents').append(el);
+    fitBubble(el.querySelector('.tip-bubble'));
     return el;
+  }
+  // A speech bubble above the head, as wide as its text, its tail pointing down at the resident.
+  function fitBubble(bubble) {
+    const text = bubble.querySelector('text');
+    const width = Math.ceil(text.getComputedTextLength()) + 8, left = -Math.round(width / 2);
+    text.setAttribute('x', 0);
+    bubble.querySelector('.bubble-bg').setAttribute('d', `M${left} -38h${width}v11h${-width / 2 + 3}v1h-1v1h-1v1h-1v-3h${-width / 2}z`);
   }
   function fitNameplate(actor, title) {
     const el = actor.el, text = el.querySelector('.nameplate-text');
@@ -977,9 +990,7 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     el.classList.remove(...[...el.classList].filter((name) => name.startsWith('event-')));
     const text = el.querySelector('.event-bubble text');
     text.textContent = s.event.text;
-    const width = Math.ceil(text.getComputedTextLength()) + 8, left = -Math.round(width / 2);
-    text.setAttribute('x', 0);
-    el.querySelector('.bubble-bg').setAttribute('d', `M${left} -38h${width}v11h${-width / 2 + 3}v1h-1v1h-1v1h-1v-3h${-width / 2}z`);
+    fitBubble(el.querySelector('.event-bubble'));
     const actor = actors.get(s.id);
     if (actor) actor.event = { kind: s.event.kind, start: performance.now() };
     requestAnimationFrame(() => {
@@ -1526,9 +1537,9 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
       title = '开 PR / MR';
       content = `<p class="plaque-summary">做完的工作从这里出镇。需要交付代码时，居民按 pstack-opening-a-pr 把改动整理成小而有序的提交，GitHub 仓库开 PR，GitLab 仓库开 MR，没有远端或命令行工具时只留本地提交；开好就贴出链接并停下，不会接着盯 CI。只读的任务不经过这道关口，直接离开。</p>${startControls(B.deliverySkill ?? GATE_COMMAND, Boolean(B.deliverySkill), '会打开该工作区的新会话并填好命令；补一句要整理和交付的改动（分支或路径），再发送。')}<h3>最近离开 · ${leavers.length}</h3>${leaverList(leavers)}`;
     } else if (panel.kind === 'entry') {
-      chip = '入镇'; accent = 'construction';
-      title = '说目标';
-      content = `<p class="plaque-summary">不知道该点哪块木牌时，从这里说一句目标就行。居民先用自己的话复述目标，再按 poteto 的规矩挑合适的木牌开工；活儿大或没有合适的木牌时去「想办法」，没接入小镇的活会直接说明。</p>${startControls(B.entrySkill, true, '会打开该工作区的新会话并填好 /pstack-poteto-mode，在后面写上目标再发送；不会替你发送。')}`;
+      chip = '许愿池'; accent = 'construction';
+      title = '许个愿';
+      content = `<p class="plaque-summary">说一句你想做什么就行，不用先挑木牌。居民会先复述目标，再自己挑合适的流程开工；活儿大或没有合适的木牌时去「想办法」，没接入小镇的活会直接说明。</p>${startControls(B.entrySkill, true, '会打开该工作区的新会话并填好 /pstack-poteto-mode，在后面直接写你的问题再发送；不会替你发送。')}`;
     } else if (panel.kind === 'models') {
       title = '模型分工';
       content = modelSettingsCard();
@@ -1560,6 +1571,11 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
   }
   // Every panel is one modal dialog: opening another panel from inside swaps its content, never stacks.
   function openPanel(next) {
+    if ((next.kind === 'resident' || next.kind === 'mailbox') && !tipsSeen.has(next.kind)) {
+      tipsSeen.add(next.kind);
+      try { localStorage.setItem(TIPS_KEY, JSON.stringify([...tipsSeen])); } catch {}
+      updateTips();
+    }
     panel = next;
     panelContent = '';
     evidence = null;
@@ -1570,6 +1586,15 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     refreshPanel();
     if (!dialog.open) dialog.showModal();
     $('close-popover').focus({ preventScroll: true });
+  }
+
+  // The first resident in town says 点我看进度; a mailbox with letters says so too.
+  function updateTips() {
+    $('map-mailbox').classList.toggle('inviting', mailCount > 0 && !tipsSeen.has('mailbox'));
+    const first = tipsSeen.has('resident') ? null : nodes.get(sessions.find(onMap)?.id);
+    for (const el of nodes.values()) el.classList.toggle('tip', el === first);
+    // SVG paints in document order: the speaking resident goes last so neighbours' nameplates stay under its bubble.
+    if (first && first !== $('residents').lastElementChild) $('residents').append(first);
   }
 
   // ---------- Live render ----------
@@ -1614,10 +1639,13 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     const residents = sessions.filter(onMap);
     const live = B.connection.status === 'live';
     $('connection-banner').hidden = B.connection.status !== 'error';
-    // Only a host that advertises the entry skill can let the client prefill it; older hosts show no button.
+    // Only a host that advertises the entry skill can let the client prefill it; older hosts leave the well inert.
     $('map-entry').hidden = !B.entrySkill;
     if (panel?.kind === 'entry' && !B.entrySkill) closePanel(false);
-    $('empty-state').hidden = sessions.length > 0 || B.connection.status === 'error';
+    // With nobody in town the well's bubble invites a wish and stands in for the empty-state note.
+    const inviting = live && Boolean(B.entrySkill) && residents.length === 0;
+    $('map-entry').classList.toggle('inviting', inviting);
+    $('empty-state').hidden = inviting || sessions.length > 0 || B.connection.status === 'error';
     $('empty-state').textContent = live ? '还没有会话在跑' : '正在读取会话';
     summary = {
       residents: residents.length,
@@ -1715,6 +1743,7 @@ import { CHARACTERS, PALETTE, PLAQUES, PROPS, SPRITES, characterLayers, plaqueFo
     });
     for (const station of document.querySelectorAll('.station')) station.classList.toggle('active', active.has(station.dataset.plaque));
     if (live) primed = true;
+    updateTips();
     updateSelection();
     refreshPanel();
     animate();

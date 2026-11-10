@@ -16,9 +16,9 @@
           <canvas id="town-ground" aria-hidden="true"></canvas>
           <canvas id="town-sprites" aria-hidden="true"></canvas>
           <button id="map-notice" class="map-object notice-object" type="button" aria-label="告示牌：正在连接 DSH，打开设置与居民列表" aria-haspopup="dialog" aria-expanded="false" aria-controls="town-popover"><span class="notice-face" aria-hidden="true"><span id="notice-stats"></span><span class="notice-connection"><i class="connection-lamp"></i><span id="notice-status">连接中</span></span></span><span class="map-object-label">设置</span></button>
-          <button id="map-mailbox" class="map-object mailbox-object" type="button" aria-label="收件箱：0 项待处理" aria-haspopup="dialog" aria-expanded="false" aria-controls="town-popover"><span id="mail-badge" class="mail-badge" hidden>0</span><span class="map-object-label">收件箱</span></button>
+          <button id="map-mailbox" class="map-object mailbox-object" type="button" aria-label="收件箱：0 项待处理" aria-haspopup="dialog" aria-expanded="false" aria-controls="town-popover"><span id="mail-badge" class="mail-badge" hidden>0</span><span class="landmark-bubble" aria-hidden="true">有信，点开看看</span><span class="map-object-label">收件箱</span></button>
           <button id="map-gate" class="map-object gate-object" type="button" aria-label="出镇关口：开 PR / MR，查看最近离开的居民" aria-haspopup="dialog" aria-expanded="false" aria-controls="town-popover"><span class="map-object-label">开 PR / MR</span></button>
-          <button id="map-entry" class="map-object entry-object" type="button" hidden aria-label="入镇：说一句目标，按 poteto 的规矩挑合适的木牌开工" aria-haspopup="dialog" aria-expanded="false" aria-controls="town-popover"><span class="map-object-label">说目标</span></button>
+          <button id="map-entry" class="map-object entry-object" type="button" hidden aria-label="许愿池：说一句想做什么，居民自己挑合适的流程开工" aria-haspopup="dialog" aria-expanded="false" aria-controls="town-popover"><span class="landmark-bubble" aria-hidden="true">想做什么？许个愿吧</span><span class="map-object-label">许愿池</span></button>
           <svg id="town" preserveAspectRatio="xMinYMin meet" role="group" aria-label="像素小镇：工地、侦探社、灭虫急诊站与公园，木牌代表 pstack playbook">
             <g id="scenery"></g>
             <g id="buildings"></g>

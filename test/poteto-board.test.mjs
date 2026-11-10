@@ -85,8 +85,13 @@ async function exerciseEntry() {
     const button = doc().querySelector('#map-entry')
     const box = button.getBoundingClientRect(), stage = doc().querySelector('#town-stage').getBoundingClientRect()
     const label = button.querySelector('.map-object-label').getBoundingClientRect()
-    return { hidden: button.hidden, width: box.width, height: box.height, text: button.textContent.trim(),
-      inside: label.left >= stage.left && label.right <= stage.right && box.top >= stage.top && box.bottom <= stage.bottom }
+    const bubble = button.querySelector('.landmark-bubble'), bubbleBox = bubble.getBoundingClientRect()
+    const note = doc().querySelector('#empty-state')
+    return { hidden: button.hidden, width: box.width, height: box.height, text: button.querySelector('.map-object-label').textContent,
+      inside: label.left >= stage.left && label.right <= stage.right && box.top >= stage.top && box.bottom <= stage.bottom,
+      bubble: bubbleBox.width > 0 ? bubble.textContent : null,
+      bubbleInside: bubbleBox.width > 0 && bubbleBox.left >= stage.left && bubbleBox.right <= stage.right && bubbleBox.top >= stage.top,
+      emptyNote: note.hidden ? null : note.textContent }
   }
   const dialog = () => ({
     open: doc().querySelector('#town-popover').open, title: doc().querySelector('#popover-title').textContent,
@@ -123,7 +128,7 @@ async function exerciseEntry() {
     const layout = construction()
     click('#map-entry')
     await flushMessages()
-    const entryPanel = { ...dialog(), expanded: doc().querySelector('#map-entry').getAttribute('aria-expanded') }
+    const entryPanel = { ...dialog(), expanded: doc().querySelector('#map-entry').getAttribute('aria-expanded'), bubble: entry().bubble }
     await start()
     const entryStarts = starts.splice(0)
     await close()
@@ -139,6 +144,7 @@ async function exerciseEntry() {
     const help = doc().querySelector('#info-content').textContent
 
     await load('advertised')
+    const advertisedEntry = entry()
     click('#map-entry')
     await flushMessages()
     const advertised = dialog()
@@ -146,40 +152,48 @@ async function exerciseEntry() {
     await flushMessages()
     const advertisedStarts = starts.splice(0)
     await fetch('/result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-      oldEntry, oldFigure, oldStarts, newEntry, layout, entryPanel, entryStarts, focusReturned, figure, figureStarts, help, advertised, advertisedStarts, errors,
+      oldEntry, oldFigure, oldStarts, newEntry, layout, entryPanel, entryStarts, focusReturned, figure, figureStarts, help, advertisedEntry, advertised, advertisedStarts, errors,
     }) })
   } catch (error) {
     await fetch('/result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: error.stack }) })
   }
 }
 
-test('说目标 appears only for a host advertising the entry skill, and 想办法 completes 工地 as 3+3', { timeout: 45000 }, async t => {
+test('许愿池 starts poteto mode only for a host advertising the entry skill, invites while the town is empty, and 想办法 completes 工地 as 3+3', { timeout: 45000 }, async t => {
   const current = await hostPayload(fileURLToPath(new URL('../lib/', import.meta.url)))
   assert.equal(current.entrySkill, 'pstack-poteto-mode')
   const old = process.env.OLD_TOWN_LIB ? await hostPayload(process.env.OLD_TOWN_LIB)
     : { workflows: workflows.filter(workflow => workflow.id !== 'figure-it-out'), deliverySkill: DELIVERY_SKILL, legacyWorkflowIds: LEGACY_WORKFLOW_IDS, sessions: [] }
   assert.equal(Object.hasOwn(old, 'entrySkill'), false, 'the older host advertises no entry skill')
   assert.equal(old.workflows.some(workflow => workflow.id === 'figure-it-out'), false, 'the older host predates figure-it-out')
-  const fixtures = new Map([['old', old], ['new', current], ['advertised', { ...current, entrySkill: 'host-advertised-entry' }]])
+  // One resident in the advertised town: the well stops inviting once somebody is at work.
+  const resident = { sessionId: 'proof-resident', title: '添加搜索筛选', cwd: '/fixture/poteto-board', workflow: 'feature', stage: 'build', status: 'working',
+    skill: null, detail: '', subagentCount: 0, skipped: [], needs: null, gag: null, startedAt: Date.now(), stageEnteredAt: Date.now(), lastEventAt: Date.now(), history: [] }
+  const fixtures = new Map([['old', old], ['new', current], ['advertised', { ...current, entrySkill: 'host-advertised-entry', sessions: [resident] }]])
   const { evidence, requests } = await boardProof({ fixtures, exercise: exerciseEntry, title: 'Poteto board proof' })
   assert.equal(evidence.error, undefined, evidence.error)
   assert.deepEqual(evidence.errors, [])
 
-  assert.deepEqual(evidence.oldEntry, { hidden: true, width: 0, height: 0, text: '说目标', inside: false }, 'old host: no entry button')
+  assert.deepEqual(evidence.oldEntry, { hidden: true, width: 0, height: 0, text: '许愿池', inside: false, bubble: null, bubbleInside: false, emptyNote: '还没有会话在跑' }, 'old host: inert well, plain empty-state note')
   assert.equal(evidence.oldFigure.hint, '还没接入 DSH，暂时不能从这里开工。')
   assert.equal(evidence.oldFigure.hasStart, false)
   assert.deepEqual(evidence.oldStarts, [], 'old host posts no start request')
 
   assert.equal(evidence.newEntry.hidden, false)
-  assert.ok(evidence.newEntry.width > 0 && evidence.newEntry.height > 0 && evidence.newEntry.inside, 'entry button is visible inside the town')
-  assert.deepEqual(evidence.entryPanel, { open: true, title: '说目标', chip: '入镇', hint: evidence.entryPanel.hint, hasStart: true, command: '/pstack-poteto-mode', expanded: 'true' })
+  assert.ok(evidence.newEntry.width > 0 && evidence.newEntry.height > 0 && evidence.newEntry.inside, 'the well is clickable inside the town')
+  assert.equal(evidence.newEntry.bubble, '想做什么？许个愿吧', 'an empty town shows the invitation')
+  assert.ok(evidence.newEntry.bubbleInside, 'the invitation stays inside the town')
+  assert.equal(evidence.newEntry.emptyNote, null, 'the invitation replaces the empty-state note')
+  assert.deepEqual(evidence.entryPanel, { open: true, title: '许个愿', chip: '许愿池', hint: evidence.entryPanel.hint, hasStart: true, command: '/pstack-poteto-mode', expanded: 'true', bubble: null })
   assert.match(evidence.entryPanel.hint, /不会替你发送/u)
   assert.deepEqual(evidence.entryStarts, [{ type: 'pixel-town-pstack/start-session', skill: 'pstack-poteto-mode', workspaceId: 'proof-workspace' }])
-  assert.equal(evidence.focusReturned, true, 'closing the panel returns focus to 说目标')
+  assert.equal(evidence.focusReturned, true, 'closing the panel returns focus to the well')
   assert.equal(evidence.figure.title, '想办法')
   assert.equal(evidence.figure.command, '/pstack-figure-it-out')
   assert.deepEqual(evidence.figureStarts, [{ type: 'pixel-town-pstack/start-session', skill: 'pstack-figure-it-out', workspaceId: 'proof-workspace' }])
-  assert.ok(evidence.help.includes('说目标') && evidence.help.includes('想办法'))
+  assert.ok(evidence.help.includes('许愿池') && evidence.help.includes('想办法'))
+  assert.equal(evidence.advertisedEntry.hidden, false)
+  assert.equal(evidence.advertisedEntry.bubble, null, 'a resident in town silences the invitation')
   assert.equal(evidence.advertised.command, '/host-advertised-entry')
   assert.deepEqual(evidence.advertisedStarts, [{ type: 'pixel-town-pstack/start-session', skill: 'host-advertised-entry' }], 'the payload, not a guessed command, is authoritative')
 

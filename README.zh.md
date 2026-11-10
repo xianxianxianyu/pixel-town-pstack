@@ -43,7 +43,7 @@ dsh plugin --profile <profile> add link:"$(pwd)"
 
 点击木牌，选择工作区，再点**新开会话**。DSH 会打开一个新会话或空白会话，并填入**尚未发送**的斜杠命令草稿；补充任务后由你发送。已有草稿不会被覆盖。也可以直接把下表中的命令粘贴到 DSH 对话里。
 
-不知道该点哪块木牌时，输入 **`/pstack-poteto-mode <目标>`**，或点西边「入镇」石下的**说目标**，得到同样的未发送草稿。poteto 模式先复述目标，再按 poteto 的规矩匹配并加载对应的工作流技能，居民随之出现在那块木牌前。大活、跨很多地方、放手离开或没有合适木牌的目标走**想办法**（`/pstack-figure-it-out`）。小镇没有移植的上游 playbook（babysit、shipping、autopilot、orchestrate、worktree cleanup）会直接说明，不套阶段协议。入口只供用户调用（`disable-model-invocation: true`），模型的技能目录和 `skill` 工具都看不到它。上游 24 条原则原样放在 `skills/pstack-poteto-mode/references/principles/`，提供器把它们的绝对目录注入 poteto 模式和「想办法」。旧宿主不显示说目标按钮。
+不知道该点哪块木牌时，点广场中央的**许愿池**，或输入 **`/pstack-poteto-mode <目标>`**，得到同样的未发送草稿，在命令后面直接写你想做什么即可。镇上没有居民时，许愿池上方会冒气泡提醒你许个愿。poteto 模式先复述目标，再按 poteto 的规矩匹配并加载对应的工作流技能，居民随之出现在那块木牌前。大活、跨很多地方、放手离开或没有合适木牌的目标走**想办法**（`/pstack-figure-it-out`）。小镇没有移植的上游 playbook（babysit、shipping、autopilot、orchestrate、worktree cleanup）会直接说明，不套阶段协议。入口只供用户调用（`disable-model-invocation: true`），模型的技能目录和 `skill` 工具都看不到它。上游 24 条原则原样放在 `skills/pstack-poteto-mode/references/principles/`，提供器把它们的绝对目录注入 poteto 模式和「想办法」。旧宿主的许愿池不能点。
 
 同一会话后续每条用户消息，包括 `continue` 和 `new task`，宿主都会补一条简短的模式提醒。完整技能仍在对话中。路由和回复规矩仍取决于模型，提醒不是强制合规检查。
 
@@ -88,6 +88,7 @@ Statechart 需要 **Node ≥22.18**（Node 23 的原生 TypeScript 需要 ≥23.
 
 ### 居民、徽章和收件箱
 
+- **新手气泡**：镇上第一个居民头顶冒「点我看进度」，收件箱有信时冒「有信，点开看看」；在这个浏览器里点开过一次居民卡或收件箱，对应的气泡就不再出现。是否看过只记在页面的本地存储里。
 - 居民所在工位和卡片展示已报告阶段、跳过或重走的步骤、流程交接、子智能体和 token 用量。token 总数包含重复读取上下文，不是去重后的文本量，也不是金额估算。
 - **目标**旗帜展示通过 `/goal <目标>` 启动的原生 DSH goal。自主执行由 DSH 负责，小镇只展示状态。
 - 会话里的智能体用 [`dsh-canvas`](https://github.com/xianxianxianyu/dsh-canvas) 插件的 `canvas_check` 校验过图之后，居民卡片会出现**最新图表**按钮；完工离镇后，告示牌和出口的**最近离开**里仍保留这个按钮。点击打开对应对话，并在 DSH 右侧栏打开这张图；没装 dsh-canvas 时按纯文本显示。所有工作流程都提示智能体：有 `canvas-diagram` 技能就用它画图，否则输出 `mermaid` 代码块。
