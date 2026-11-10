@@ -10,7 +10,7 @@ const prefix = 'skills/pstack-statechart/scripts/'
 
 test('vendored statechart runtime matches the pinned upstream SHA-256 inventory', async () => {
   const notice = await readFile(new URL('THIRD_PARTY_NOTICES.md', root), 'utf8')
-  const inventory = /```sha256\n([\s\S]*?)\n```/u.exec(notice)?.[1]
+  const inventory = /### Statechart runtime SHA-256 inventory[\s\S]*?```sha256\n([\s\S]*?)\n```/u.exec(notice)?.[1]
   assert.ok(inventory, 'upstream runtime inventory is required')
   const entries = inventory.split('\n').map(line => {
     const match = /^([a-f0-9]{64})  (skills\/pstack-statechart\/scripts\/[\w./-]+)$/u.exec(line)
