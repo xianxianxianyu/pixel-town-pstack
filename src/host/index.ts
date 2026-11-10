@@ -55,7 +55,13 @@ function parseSkill(raw: string, path: string): { description: string; content: 
   const workflow = attributes && 'workflow' in attributes ? attributes.workflow : undefined
   if (workflow !== undefined && typeof workflow !== 'string') throw new Error(`pixel-town-pstack: ${path} has invalid metadata.workflow`)
   const content = raw.slice(frontmatter[0].length).trim()
-  return { description: metadata.description, content: workflow === undefined ? content : `${content}\n\n${stageProtocol(workflow)}`, ...(workflow === undefined ? {} : { workflow }) }
+  if (workflow === undefined) return { description: metadata.description, content }
+  // skills/ is read live while the registry is in the running host's memory, so a newer skill can
+  // name a workflow this host predates. Serve that one skill plainly instead of failing the catalog.
+  if (!workflows.some(known => known.id === workflow)) {
+    return { description: metadata.description, content: `${content}\n\n> 当前宿主不认识工作流 \`${workflow}\`，按正文执行，不调用 pstack_stage；重启 DSH 加载新版小镇后才有阶段协议。` }
+  }
+  return { description: metadata.description, content: `${content}\n\n${stageProtocol(workflow)}`, workflow }
 }
 
 export function apply(ctx: HostContext, config: Config): void {

@@ -995,6 +995,27 @@ test('shared statechart load resolves runnable resource paths after installation
   assert.equal(skill.content.split('\n').filter(line => line === diagramLine).length, 1)
 })
 
+// A live-linked skills/ directory can gain a workflow id before the running host's
+// registry learns it; that one skill degrades, the rest of the catalog survives.
+test('a skill naming an unknown workflow is listed and served without a stage protocol', async () => {
+  const skillsRoot = await mkdtemp(join(dataRoot, 'future-skills-'))
+  await cp(new URL('../skills/pstack-bug-fix', import.meta.url), join(skillsRoot, 'pstack-bug-fix'), { recursive: true })
+  await cp(new URL('../skills/pstack-opening-a-pr', import.meta.url), join(skillsRoot, 'pstack-opening-a-pr'), { recursive: true })
+  await cp(new URL('../skills/pstack-bug-fix', import.meta.url), join(skillsRoot, 'pstack-future'), { recursive: true })
+  const future = join(skillsRoot, 'pstack-future', 'SKILL.md')
+  await writeFile(future, (await readFile(future, 'utf8')).replace('workflow: bug-fix', 'workflow: future-workflow'))
+  const h = host({ config: { skillsRoot } })
+  const candidates = await h.provider.list({})
+  assert.deepEqual(candidates.map(candidate => candidate.name), ['pstack-bug-fix', 'pstack-future', 'pstack-opening-a-pr'])
+  const served = await h.provider.get(candidates.find(candidate => candidate.name === 'pstack-future'), {})
+  assert.match(served.content, /# Bug fix/u)
+  assert.doesNotMatch(served.content, /## 阶段协议|子 agent 模型/u)
+  const notes = served.content.split('\n').filter(line => line.includes('future-workflow'))
+  assert.equal(notes.length, 1, 'one line explains the missing stage protocol')
+  assert.match(notes[0], /不认识.*pstack_stage/u)
+  assert.ok((await h.provider.get(candidates.find(candidate => candidate.name === 'pstack-bug-fix'), {})).content.includes(stageProtocol('bug-fix')))
+})
+
 test('wave-two manifests expose every fixed stage and optional path', () => {
   const expected = [
     ['prototype', '出原型', ['decide', 'references', 'build', 'observe', 'present'], ['references']],
