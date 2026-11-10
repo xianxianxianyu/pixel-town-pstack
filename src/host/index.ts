@@ -424,13 +424,26 @@ export function apply(ctx: HostContext, config: Config): void {
       const block = models ? modelRoleBlock(workflow, models.assignments, models.selection) : ''
       // figure-it-out reads the same index whether it was routed here or started from its plaque.
       const poteto = entry ? dirname(locator) : workflow === 'figure-it-out' ? join(dirname(locator), '..', ENTRY_SKILL) : undefined
-      const principles = poteto === undefined ? '' : [
-        '## Poteto principles',
-        '',
-        'Use these resolved absolute paths; do not guess the installation directory.',
-        `- Poteto-mode skill file, with the Principles index: \`${join(poteto, 'SKILL.md')}\``,
-        `- Principle leaves, one \`<name>.md\` per principle: \`${join(poteto, 'references', 'principles')}\``,
-      ].join('\n')
+      let principles = ''
+      if (poteto !== undefined) {
+        const path = join(poteto, 'SKILL.md')
+        const lines = (entry ? raw : await readFile(path, { encoding: 'utf8', signal })).split('\n')
+        const start = lines.indexOf('## Principles')
+        if (start < 0) throw new Error(`pixel-town-pstack: ${path} has no Principles section`)
+        const next = lines.findIndex((line, index) => index > start && line.startsWith('## '))
+        principles = [
+          '## Poteto principles',
+          '',
+          'Use these resolved absolute paths; do not guess the installation directory.',
+          `- Poteto-mode skill file, with the Principles index: \`${path}\``,
+          `- Principle leaves, one \`<name>.md\` per principle: \`${join(poteto, 'references', 'principles')}\``,
+          '',
+          'Before frame, read the Principles index with this exact bounded call. A whole-file read can be capped and hide the index.',
+          '```json',
+          JSON.stringify({ file_path: path, offset: start + 1, limit: (next < 0 ? lines.length : next) - start }),
+          '```',
+        ].join('\n')
+      }
       const statechart = candidate.name === 'pstack-statechart' ? [
         '## Installed statechart resources',
         '',

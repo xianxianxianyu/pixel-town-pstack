@@ -1126,6 +1126,9 @@ test('poteto mode and figure-it-out inject the resolved principle paths, and eve
   for (const name of ['pstack-poteto-mode', 'pstack-figure-it-out']) {
     await cp(new URL(`../skills/${name}`, import.meta.url), join(skillsRoot, name), { recursive: true })
   }
+  const installedSkill = join(skillsRoot, 'pstack-poteto-mode', 'SKILL.md')
+  const shifted = (await readFile(installedSkill, 'utf8')).replace('\n## Principles\n', '\nExtra installed preface.\n\n## Principles\n')
+  await writeFile(installedSkill, shifted)
   const h = host({ config: { skillsRoot } })
   const candidates = await h.provider.list({})
   const skillFile = join(skillsRoot, 'pstack-poteto-mode', 'SKILL.md')
@@ -1136,6 +1139,13 @@ test('poteto mode and figure-it-out inject the resolved principle paths, and eve
     assert.ok(block, `${name} carries the generated principles block`)
     assert.ok(block.includes(`\`${skillFile}\``), `${name} names the poteto-mode skill file`)
     assert.ok(block.includes(`\`${leaves}\``), `${name} names the leaf directory`)
+    const recipe = block.match(/```json\n([^\n]+)\n```/u)
+    assert.ok(recipe, 'the injected index read is bounded so the output cap cannot hide its middle')
+    const input = JSON.parse(recipe[1])
+    assert.equal(input.file_path, skillFile)
+    const readIndex = shifted.split('\n').slice(input.offset - 1, input.offset - 1 + input.limit).join('\n')
+    assert.equal(readIndex.trim(), shifted.slice(shifted.indexOf('## Principles\n'), shifted.indexOf('## Autonomy\n')).trim())
+    assert.equal([...readIndex.split('The leaves are upstream text')[0].matchAll(/^- \*\*/gmu)].length, 24)
     assert.equal(content.includes('## 阶段协议 (stage protocol)'), name === 'pstack-figure-it-out')
   }
   const { content: figure } = await h.provider.get(candidates.find(candidate => candidate.name === 'pstack-figure-it-out'), {})

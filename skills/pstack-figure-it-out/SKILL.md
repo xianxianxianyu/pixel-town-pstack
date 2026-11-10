@@ -13,7 +13,7 @@ When the task matches no workflow, design one. The deliverable before any code i
 
 ## Start
 
-Before frame, read the `## Principles` section of the poteto-mode skill file named under **Poteto principles** below. Do this whether the run came from `/pstack-poteto-mode` or straight from the 想办法 plaque. Each principle named in this skill is `<name>.md` in that block's leaf directory. Read the leaf in full before you apply it, and cite only leaves you read this session.
+Before frame, read the `## Principles` section of the poteto-mode skill file named under **Poteto principles** below. Use that block's exact bounded `read` call, not a whole-file read that can hide the index behind the output cap. Do this whether the run came from `/pstack-poteto-mode` or straight from the 想办法 plaque. Each principle named in this skill is `<name>.md` in that block's leaf directory. Read the leaf in full before you apply it, and cite only leaves you read this session.
 
 ## Steps
 
